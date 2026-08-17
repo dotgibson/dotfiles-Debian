@@ -1,7 +1,14 @@
 # Makefile — a discoverable façade over this repo's entry points.
 # ──────────────────────────────────────────────────────────────────────────────
-# Deliberately thin: it adds no logic beyond what CI already runs, so `make lint`
+# Deliberately thin: it adds almost no logic beyond what CI already runs, so `make lint`
 # == the reusable lint gate in dotfiles-core, and a green `make lint` means a green PR.
+#
+# ONE deliberate exception, `trap-guard`. CI's bootstrap job only ever runs --links-only,
+# so provision() — the entire out-of-band install path — is executed by NO gate anywhere,
+# which is how a leaked RETURN trap that aborted every real run shipped green. The guard
+# is STRICTER than the reusable workflow, never looser, so "green here means green there"
+# still holds in the direction that matters. Getting it into CI proper is a dotfiles-core
+# change; until then the pre-commit hook is what actually blocks the commit.
 #
 # NOT to be confused with core/Makefile — that is *dotfiles-core's* Makefile, which
 # arrives with the vendored subtree. Its `audit` / `sync` / `release` targets operate on
@@ -11,7 +18,7 @@
 # The vendored core/ is excluded from every check here: it is gated upstream.
 # ──────────────────────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := help
-.PHONY: help lint shellcheck syntax zsh-syntax markdown check dry-run links-only packages-check tool-checksums integrity hooks clean
+.PHONY: help lint shellcheck syntax zsh-syntax trap-guard markdown check dry-run links-only packages-check tool-checksums integrity hooks clean
 
 # Repo-owned shell only — core/ is gated upstream. Mirrors the reusable gate's
 # `git ls-files '*.sh' ':!:core/**'`.
@@ -23,7 +30,7 @@ help: ## Show this help
 	@grep -E '^[a-z][a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) \
 		| sed -E 's/:.*## /\t/' | sort | awk -F'\t' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-lint: shellcheck syntax zsh-syntax ## The gate: shellcheck + bash -n + zsh -n (what CI runs)
+lint: shellcheck syntax zsh-syntax trap-guard ## The gate: shellcheck + bash -n + zsh -n + trap discipline
 	@printf '\033[32m✓\033[0m lint clean\n'
 
 shellcheck: ## ShellCheck the repo-owned bash (excludes the vendored core/)
@@ -48,6 +55,20 @@ zsh-syntax: ## zsh -n the repo-owned zsh modules (shellcheck has no zsh mode)
 	@if ! command -v zsh >/dev/null 2>&1; then echo "zsh not installed — skipping"; \
 	elif test -z "$(ZSH_FILES)"; then echo "no repo-owned .zsh"; \
 	else for f in $(ZSH_FILES); do echo "zsh -n $$f"; zsh -n "$$f" || exit 1; done; fi
+
+trap-guard: ## Refuse a RETURN trap that does not disarm itself (shellcheck cannot see this)
+	@# A bash RETURN trap is a GLOBAL slot, not a function-scoped one: arm it inside a
+	@# function and it stays armed in the CALLER's frame, firing a second time when the
+	@# caller returns — by which point the local it cleans up is out of scope and `set -u`
+	@# kills the script. That is invisible to shellcheck, to `bash -n`, and to every CI
+	@# job here (all of which run --links-only and never enter provision). Hence a grep.
+	@test -n "$(SH_FILES)" || exit 0
+	@if grep -nE "^[[:space:]]*trap[[:space:]].*[[:space:]]RETURN[[:space:]]*$$" $(SH_FILES) | grep -v 'trap - RETURN'; then \
+	  echo "^ a RETURN trap must disarm itself:  trap 'trap - RETURN; …' RETURN"; \
+	  echo "  Otherwise it leaks into the caller's frame and fires again on ITS return."; \
+	  exit 1; \
+	fi
+	@printf '\033[32m✓\033[0m RETURN traps disarm themselves\n'
 
 markdown: ## markdownlint the repo-owned docs (shares .markdownlint.jsonc with Core)
 	@command -v markdownlint-cli2 >/dev/null 2>&1 \

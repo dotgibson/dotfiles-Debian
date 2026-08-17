@@ -394,8 +394,15 @@ _vi_fetch() {
 verified_install() {
   local bin="$1" url="$2" want="$3" inner="${4:-$1}" tmp=""
   _vi_fetch "$bin" "$url" "$want" tmp || return 0
-  # Clean up on every exit path below.
-  trap 'rm -rf "$tmp"' RETURN
+  # Clean up on every exit path below. Disarm FIRST: a RETURN trap is a GLOBAL slot, not
+  # a function-scoped one, so an armed trap survives into the CALLER's frame and fires
+  # AGAIN on ITS return — where $tmp is long out of scope and `set -u` makes it fatal.
+  # That aborted every fresh-box run at the instant provision() returned, after all of its
+  # work had succeeded, so wire_links never ran and the box got every package but not one
+  # symlink. Worse, bash blames a RETURN trap on the last nested function DEFINITION in
+  # that frame (_add_vendor_repo) rather than on this line, which sends the hunt to
+  # entirely the wrong place. Keep the disarm, and keep it first.
+  trap 'trap - RETURN; rm -rf "$tmp"' RETURN
 
   local found=""
   if tar -xzf "$tmp/asset" -C "$tmp" 2>/dev/null; then
@@ -448,7 +455,8 @@ verified_install() {
 verified_tree_install() {
   local bin="$1" url="$2" want="$3" optdir="$4" relbin="$5" tmp=""
   _vi_fetch "$bin" "$url" "$want" tmp || return 0
-  trap 'rm -rf "$tmp"' RETURN
+  # Self-disarming, for the reason spelled out at length in verified_install above.
+  trap 'trap - RETURN; rm -rf "$tmp"' RETURN
 
   if ! tar -xzf "$tmp/asset" -C "$tmp" 2>/dev/null; then
     note_fail "$bin: could not unpack the asset — SKIPPED"
