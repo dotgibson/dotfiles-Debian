@@ -81,7 +81,7 @@ repos:
       - id: return-trap-disarmed
         name: refuse a RETURN trap that does not disarm itself
         entry: |
-          bash -c 'if grep -nE "^[[:space:]]*trap[[:space:]].*[[:space:]]RETURN[[:space:]]*$" "$@" | grep -v "trap - RETURN"; then
+          bash -c 'if grep -nE "^[[:space:]]*trap[[:space:]].*[[:space:]]RETURN([[:space:]]|$)" "$@" | grep -v "trap - RETURN"; then
             echo "^ a RETURN trap must disarm itself — make its body start with:  trap - RETURN;" >&2;
             echo "  otherwise it leaks into the caller frame and fires again on ITS return." >&2;
             exit 1;

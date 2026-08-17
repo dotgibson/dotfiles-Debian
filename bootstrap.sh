@@ -402,7 +402,15 @@ verified_install() {
   # symlink. Worse, bash blames a RETURN trap on the last nested function DEFINITION in
   # that frame (_add_vendor_repo) rather than on this line, which sends the hunt to
   # entirely the wrong place. Keep the disarm, and keep it first.
-  trap 'trap - RETURN; rm -rf "$tmp"' RETURN
+  #
+  # `|| true` guards a different edge. A RETURN trap does NOT clobber the function's
+  # return status — bash preserves it, so `return 7` still surfaces as 7 even when the
+  # trap body ends in a failure — but a FAILING command INSIDE the trap does trip errexit.
+  # `rm -rf` on our own mktemp dir is about as safe as it gets, yet the cost of the
+  # unlucky case is aborting a bootstrap that had otherwise fully succeeded. Same rule
+  # Core applies in blib_set_login_shell: a trailing cleanup step may not throw away a
+  # complete run.
+  trap 'trap - RETURN; rm -rf "$tmp" || true' RETURN
 
   local found=""
   if tar -xzf "$tmp/asset" -C "$tmp" 2>/dev/null; then
@@ -455,8 +463,8 @@ verified_install() {
 verified_tree_install() {
   local bin="$1" url="$2" want="$3" optdir="$4" relbin="$5" tmp=""
   _vi_fetch "$bin" "$url" "$want" tmp || return 0
-  # Self-disarming, for the reason spelled out at length in verified_install above.
-  trap 'trap - RETURN; rm -rf "$tmp"' RETURN
+  # Self-disarming and errexit-proof, for the reasons spelled out in verified_install.
+  trap 'trap - RETURN; rm -rf "$tmp" || true' RETURN
 
   if ! tar -xzf "$tmp/asset" -C "$tmp" 2>/dev/null; then
     note_fail "$bin: could not unpack the asset — SKIPPED"

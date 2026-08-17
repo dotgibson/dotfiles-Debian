@@ -62,8 +62,12 @@ trap-guard: ## Refuse a RETURN trap that does not disarm itself (shellcheck cann
 	@# caller returns — by which point the local it cleans up is out of scope and `set -u`
 	@# kills the script. That is invisible to shellcheck, to `bash -n`, and to every CI
 	@# job here (all of which run --links-only and never enter provision). Hence a grep.
+	@#
+	@# RETURN is matched as a SIGNAL TOKEN — followed by whitespace or end-of-line — not
+	@# only as the last word. Anchoring it to end-of-line let `trap '...' RETURN  # note`
+	@# and `trap '...' RETURN EXIT` through, and both leak exactly the same way.
 	@test -n "$(SH_FILES)" || exit 0
-	@if grep -nE "^[[:space:]]*trap[[:space:]].*[[:space:]]RETURN[[:space:]]*$$" $(SH_FILES) | grep -v 'trap - RETURN'; then \
+	@if grep -nE "^[[:space:]]*trap[[:space:]].*[[:space:]]RETURN([[:space:]]|$$)" $(SH_FILES) | grep -v 'trap - RETURN'; then \
 	  echo "^ a RETURN trap must disarm itself:  trap 'trap - RETURN; …' RETURN"; \
 	  echo "  Otherwise it leaks into the caller's frame and fires again on ITS return."; \
 	  exit 1; \
