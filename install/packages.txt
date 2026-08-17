@@ -1,0 +1,112 @@
+# dotfiles-Debian :: base CLI stack (apt / Debian-family names)
+# ──────────────────────────────────────────────────────────────────────────────
+# One package per line. '#' comments and blank lines are ignored (blib_read_pkgs).
+# Target: Ubuntu 24.04 LTS (noble). Also resolves on Debian trixie — both are CI lanes.
+#
+# THIS LIST IS DELIBERATELY SHORTER THAN THE OTHER LINUX REPOS'.
+# Ubuntu 24.04 froze in April 2024, so a large slice of the modern-CLI stack is either
+# absent from noble or too old to satisfy Core. Everything apt cannot honestly supply
+# lives in bootstrap.sh as a pinned, SHA-256-verified release asset instead — see
+# install/tool-versions.env. A name only belongs HERE if apt really resolves it at a
+# version Core can use; listing anything else just moves the failure to first-boot,
+# where apt_install's per-package retry hides it behind a "skipped" line.
+#
+# Binary renames: `bat` runs as `batcat` and `fd-find` installs `fdfind` — Core's
+# 00-tools.zsh already resolves both, and 20-aliases.zsh aliases them back. Don't
+# "fix" that here.
+#
+# `# min:X.Y.Z` trailing comments are a CONTRACT, not prose: test/check-packages.sh
+# compares the apt candidate against them with `dpkg --compare-versions`. Name
+# resolution alone is not enough on a frozen archive — neovim 0.9.5 and
+# tree-sitter-cli 0.20.8 both resolve fine and both break the box.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── shell + multiplexer ───────────────────────────────────────
+zsh
+tmux
+
+# ── modern coreutils replacements (all in noble universe) ─────
+eza                    # ls
+bat                    # cat — binary: batcat
+fd-find                # find — binary: fdfind
+ripgrep                # grep
+zoxide                 # cd
+fzf                    # fuzzy finder
+git-delta              # git pager / diffs — binary: delta
+btop                   # top/htop
+tealdeer               # tldr client — binary: tldr
+
+# ── the rest of core-doctor's modern-CLI set that noble actually has ──
+duf                    # df — disk usage/free
+sd                     # find & replace — note Fedora RETIRED this; noble still ships it
+gron                   # greppable JSON — likewise dropped on Fedora, present here
+hexyl                  # hex viewer
+#
+# NOT here, because noble does not have them at all — bootstrap.sh installs each as a
+# pinned release asset, a go binary, or from a vendor apt repo:
+#   starship, lazygit, atuin, mise, uv, ty   → verified release assets
+#   dust (pkg would be du-dust), xh, procs, difftastic → verified release assets
+#   glow, gum                                → Charm's signed apt repo
+#   op                                       → 1Password's signed apt repo
+#   carapace                                 → upstream .deb (go install is impossible)
+#   doggo, sesh, yq                          → go install
+#
+# yq specifically: noble's `yq` is kislyuk's PYTHON yq, and `yq-go` (mikefarah's Go
+# build, which is what this stack means by yq) is in NEITHER noble nor trixie — it is
+# sid-only. So neither name goes here; installing the wrong one is worse than none.
+
+# ── editor + vcs ──────────────────────────────────────────────
+# neovim is NOT here. noble ships 0.9.5; core/nvim's pinned nvim-treesitter (main
+# branch) hard-requires 0.12, and noble-backports has nothing. bootstrap.sh installs
+# the upstream tarball. Same story for tree-sitter-cli (noble 0.20.8, floor 0.26.1 —
+# no Debian/Ubuntu suite short of sid clears it).
+git                    # subtree is INSIDE git here — no separate git-subtree package
+openssh-client         # singular, unlike Fedora's openssh-clients
+
+# ── build + language providers ────────────────────────────────
+build-essential        # replaces Fedora's gcc + gcc-c++ + make; nvim-treesitter
+                       # compiles parsers locally and needs the C++ half for some
+                       # grammars' scanners, so this is a RUNTIME need, not just build.
+golang-go              # min:1.22 — for the go-installed tools. GOTOOLCHAIN=auto
+                       # (default since 1.21) pulls a newer toolchain per module.
+python3-pip
+python3-venv
+#
+# cargo is deliberately ABSENT. noble's rustc/cargo is 1.75, too old to build the
+# crates the other repos cargo-install (yazi, ast-grep, viddy). Rather than ship a
+# toolchain that fails halfway through a long build, those three are simply not
+# installed here — all are HAVE_*-guarded in Core, so the shell degrades cleanly.
+# Want them? `mise use -g rust` gives a current toolchain, then cargo install.
+#
+# python3-pynvim is also absent: core/nvim sets vim.g.loaded_python3_provider = 0
+# (config/providers.lua), so the provider never loads and the package is dead weight.
+
+# ── everyday utilities ────────────────────────────────────────
+curl
+wget                   # a real package here, not Fedora's virtual capability
+jq
+gnupg                  # gpg — needed to dearmor the Charm and 1Password signing keys.
+                       # An undeclared hard dependency is still a dependency.
+ca-certificates        # every out-of-band install above is an HTTPS fetch
+w3m                    # terminal web browser
+gawk
+direnv
+unzip                  # verified_install unpacks procs from a .zip
+htop
+
+# ── housekeeping ──────────────────────────────────────────────
+unattended-upgrades    # security-pocket auto-updates; these boxes are unattended by
+                       # definition. bootstrap.sh writes 20auto-upgrades unless you
+                       # pass --no-unattended.
+#
+# software-properties-common is deliberately NOT here, even though the Ubuntu path
+# needs it for `add-apt-repository -y universe`. It does not exist in Debian trixie,
+# so listing it would fail this manifest on the Debian CI lane — for a package that is
+# only ever used inside bootstrap.sh's `ID=ubuntu` branch. bootstrap.sh installs it
+# on demand there instead. This manifest stays true for the whole family.
+#
+# Deliberately NOT here:
+#   wl-clipboard / xclip — headless, ssh-only: there is no display for them to talk to.
+#     See README's "Headless clipboard" note for what that costs and how OSC 52 fixes it.
+#   flatpak / snapd      — no GUI apps on these boxes. snapd is left exactly as Ubuntu
+#     shipped it: removing it is a system-policy call, not a dotfiles one.
