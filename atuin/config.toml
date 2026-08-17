@@ -1,0 +1,236 @@
+# core/atuin/config.toml
+# ──────────────────────────────────────────────────────────────────────────────
+# atuin — the shell-history engine. Core-owned and symlinked to the DEFAULT path
+# (~/.config/atuin/config.toml), exactly like starship/lazygit/jujutsu, so no
+# ATUIN_CONFIG_DIR is needed. `atuin init zsh` is run (cached) from zsh/00-tools.zsh;
+# ATUIN_NOBIND=true is exported there so atuin binds NOTHING itself — zsh/40-bindings.zsh
+# owns Ctrl+E (the atuin TUI) and Ctrl+R stays on the fzf history widget (zsh/35-fzf.zsh).
+# The whole file is inert on a box without the atuin binary.
+#
+# PER-MACHINE SETTINGS DO NOT BELONG HERE. Core is authored once and vendored into
+# every OS repo, so this file must be identical everywhere. atuin reads env overrides
+# with the prefix `ATUIN_` and `__` as the nesting separator, which is the supported
+# way for an OS layer (os/<os>.zsh — fragment 80) or a host layer (99-local) to differ:
+#
+#     export ATUIN_DAEMON__ENABLED=true    # [daemon] enabled — left unset below, so this works
+#     export ATUIN_SYNC_ADDRESS=https://…  # sync_address — absent from this file, so this works
+#
+# AN OVERRIDE ONLY REACHES ATUIN FOR A KEY THIS FILE DOES NOT SET, and that is the whole
+# reason the [daemon] block below writes no values. atuin adds the config file as a source
+# AFTER the environment one, so the file wins on every key it mentions. A per-machine key
+# therefore has to be left unset here — asserting even its own default disables the override.
+#
+# So the settings below are NOT overridable, by design: search_mode, filter_mode, style,
+# inline_height, show_preview, enter_accept, keymap_mode, secrets_filter, history_filter and
+# update_check are fleet-wide decisions, asserted on purpose. Wanting one of them to differ
+# per machine means DELETING it here, not exporting against it — an `ATUIN_SEARCH_MODE`
+# export is silently ignored while `search_mode` is written below (verified against atuin
+# 18.19.0: the value stays `fuzzy`).
+#
+# Account/sync settings ([sync], sync_address, auto_sync) are deliberately ABSENT:
+# they are per-account state, not fleet config, and atuin's defaults already no-op
+# on a box that never ran `atuin login`. Being absent, they ARE env-overridable.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── search + TUI ──────────────────────────────────────────────────────────────
+# Values match what Core already asserts for the flat zsh history, so the two
+# history surfaces behave the same way rather than drifting apart.
+search_mode = "fuzzy"  # upstream default; the fzf-shaped matching the rest of the stack uses
+filter_mode = "global" # search everything by default (Ctrl+R inside the TUI cycles scopes)
+style = "compact"      # inline, not full-screen — the TUI is a lookup, not a destination
+inline_height = 25     # rows the compact TUI may take (upstream default: 40)
+show_preview = true    # full command text for the highlighted row (long pipelines get truncated)
+
+# enter_accept = false is a SAFETY choice, not a cosmetic one: Enter returns the
+# selected command to the prompt for review instead of executing it — the same
+# contract as HIST_VERIFY in zsh/15-history.zsh, which expands `!!` for review
+# rather than running it blind. (Upstream default is also false; set explicitly so
+# a future upstream flip can't silently start running commands on eight machines.)
+enter_accept = false
+
+# The fleet runs zsh-vi-mode (zsh/45-plugins.zsh + the zvm_after_init bindings in
+# zsh/40-bindings.zsh), so let the TUI follow the shell's active keymap instead of
+# pinning atuin to emacs (its default) and fighting muscle memory.
+keymap_mode = "auto"
+
+# ── history hygiene ───────────────────────────────────────────────────────────
+# secrets_filter is atuin's own "don't record obvious credentials" pass. It is on by
+# default upstream; pinned here because it is a security property, not a preference.
+secrets_filter = true
+
+# The atuin-side mirror of HISTORY_IGNORE in zsh/15-history.zsh — that file's comment
+# already promises "atuin has its own richer filtering (history_filter in config.toml)",
+# and until now that promise had nowhere to live. These are Rust regexes (not zsh globs)
+# matched against the command line, and they mirror that pattern ENTRY FOR ENTRY, including
+# its case sensitivity: the last group is bare (an `API_KEY` or `SECRET` anywhere in the
+# line is enough), while PASSWORD/TOKEN/ACCESS_KEY are the assignment forms only — a
+# case-insensitive bare `secret` would swallow ordinary work like `kubectl get secret`.
+# If you change one list, change the other. Operator habit still beats both: prefix
+# anything spicy with a space (HIST_IGNORE_SPACE) and it lands in neither history.
+history_filter = [
+  "^pass (show|read|insert) ",
+  "^op read",
+  "--(password|token|api-key)[ =]",
+  "(PASSWORD|TOKEN|ACCESS_KEY)=",
+  "(API_KEY|APIKEY|SECRET)",
+]
+
+# Core owns update nudges (`up` + the once/day check in zsh/60-update.zsh), and this
+# one costs a network call on the shell's hot path. One updater, not two.
+update_check = false
+
+# ── daemon (OPT-IN — ships OFF) ───────────────────────────────────────────────
+# atuin's daemon owns the SQLite writes; shells talk to it over a unix socket instead
+# of every shell and every tmux pane contending for the DB lock. That is the contention
+# this adopts away — but a shell that starts a background daemon as a side effect of
+# being opened is a behaviour change, so it is off here and stays off until a machine
+# asks for it.
+#
+# WHICH METRIC A FIGURE IS, because it decides what the figure may be quoted for. atuin's
+# `_atuin_precmd` fires `history end` into a detached background subshell — `(atuin history
+# end ... &)` — so only `history start`, taken in a command substitution by `_atuin_preexec`,
+# is on the path a human waits on. PROMPT LATENCY times `start` alone and is the only thing
+# quotable as "what a command costs the user"; TOTAL WRITE WORK times the pair and is real
+# load on the box that nobody waits for. Every table below says which it is.
+#
+# THE SYSTEMD PATH, MEASURED (dotgibson/dotfiles-core#352). Fedora 44 under WSL2 — a real
+# systemd user manager, a real transient unit (`systemd-run --user`), glibc 2.43, atuin
+# 18.19.0 — via `scripts/bench-atuin-daemon.sh --systemd`. 8 concurrent writers, one 20k-row
+# DB, 1600 samples per arm. PROMPT LATENCY, three runs with the sandbox on a local ext4 home:
+#
+#     p50    8.5-8.9 ms -> ~5.5 ms   1.55x / 1.55x / 1.60x faster
+#     p95    16-19 ms -> 7.0-8.6 ms  2.50x / 2.33x / 2.17x faster
+#     p99    28-34 ms -> 8.6-25 ms   2.91x / 3.25x / 1.35x faster
+#
+# So on the blocking call, on the systemd path, on real storage: the daemon wins at the median
+# AND at the tail — every run, in the same direction. Note what is and is not steady there.
+# p50 and p95 are tight enough to quote as figures; the p99 SIGN is stable but its MAGNITUDE
+# is not (a third run gave 1.35x where the first two gave ~3x, on the same host and settings),
+# so quote the tail as "faster in every run, 1.4-3.3x" and not as a number. That is the
+# adoption rationale, measured rather than borrowed — for this path. Same runs, TOTAL WRITE
+# WORK: p50 1.85x / 1.82x / 1.89x and p95 2.17x / 1.80x / 1.23x faster, but p99 1.45x faster,
+# 1.09x SLOWER, 1.14x faster — direction unresolved, exactly as expected, because `end` is
+# where the two metrics diverge (with the daemon off it is the slower call, the UPDATE costing
+# more than the INSERT, and with it on they equalise).
+# Do not quote a total-write-work figure as latency; that mislabelling is what left this
+# repo's own records contradicting each other on the tail.
+#
+# One earlier measurement agrees in DIRECTION: a systemd-unit run timing only the blocking
+# call found p99 improving 49-69%, with spread collapsing from 2.86x to 1.28x at 16 writers.
+# It is the SAME MACHINE, days apart — Fedora 44 / kernel 6.18.33.2 (WSL2) is this host, and
+# an earlier revision of this block called it a second one. That is reproducibility over
+# time, NOT independent corroboration, and the distinction is the whole point of the block
+# below: every figure here comes from one WSL2 host. It also timed `history start --hook`,
+# the form atuin's zsh hook actually runs, where the figures above time the plain form —
+# adjacent, not identical (scripts/verify-atuin-guard.sh measures both since #389).
+#
+# STORAGE BACKING IS THE CONFOUNDER, and it is the most useful thing these runs turned up.
+# The SAME harness, same host, same day, PROMPT LATENCY p99, daemon off -> on:
+#
+#     tmpfs (/tmp — the harness default)    2.23x SLOWER / 1.48x / 2.04x faster  (3 runs)
+#     ext4 local disk                       1.35x - 3.25x faster                 (3 runs)
+#     9p, a high-latency non-local fs       43.4x / 26.2x faster                 (2 runs)
+#
+# On tmpfs the SIGN itself flips; on durable storage every run agrees on the sign and only the
+# magnitude moves. That difference is the finding. Give the DB a real fsync and the daemon-off
+# tail blows out — p99 28-34 ms on ext4, 0.8-1.1 SECONDS on 9p — while the daemon-on arm stays
+# far below it (8.6-25 ms, ~27 ms). The mechanism upstream describes
+# is visible precisely where storage is slow enough for lock hold time to matter. This is
+# also the likeliest explanation for the contradictory older figures below, whose storage was
+# never recorded — likeliest, not established: nobody went back and re-ran them. The harness
+# now prints the sandbox filesystem on every run so this can never be ambiguous again.
+#
+# THE OLDER PAIR-TIMED FIGURES, kept because they are what the earlier claims rest on. A
+# container reproducing the TOPOLOGY of the Alpine path (no systemd, XDG_RUNTIME_DIR unset,
+# so the socket falls back to the data dir), timing `start` + `end` TOGETHER — TOTAL WRITE
+# WORK, on storage that was not recorded:
+#
+#     p50    ~43 ms -> ~31 ms       ~1.4x faster      (steady across runs)
+#     p95    ~57 ms -> ~46 ms       1.2-1.3x faster   (steady across runs)
+#     p99    ~65 ms -> 57-106 ms    FLIPS SIGN run to run — unresolved
+#     max    ~77 ms -> 140-180 ms   consistently WORSE with the daemon
+#
+# MUSL, from an Alpine 3.21 CONTAINER (real Alpine userland, real musl, no systemd) against a
+# glibc control on the SAME host, atuin 18.19.0, two runs each. Compare the RATIOS, not the
+# milliseconds. Pair-timed, and storage unrecorded, like the block above:
+#
+#                     musl (2 runs)              glibc control (2 runs)
+#     p50     1.43x / 1.46x faster        1.46x / 1.42x faster
+#     p95     1.13x / 1.24x faster        1.32x / 1.32x faster
+#     p99     1.23x / 1.70x SLOWER        1.31x / 1.07x faster  (magnitude unstable)
+#     max     consistently WORSE          flips run to run
+#
+# The p50 win has now held on every host tried, on both metrics. The far-tail reading from
+# that table — that musl DIVERGES from glibc, p99 worse with the daemon on both runs — is
+# doubly unsafe to cite now: it is pair-timed AND of unknown storage, either of which alone
+# would account for the sign. Settling it is a specific, cheap re-run: the same Alpine
+# container with CORE_ATBENCH_BASE pointed at real disk, reading the prompt-latency table.
+#
+# THE AUTOSTART SPAWN COST is the one figure that has reproduced everywhere: the FIRST
+# command in a fresh shell pays ~+41 ms (container), ~+45 ms (Alpine container) and +42.16 ms
+# (local ext4, prompt latency, p50) for the daemon spawn. It is unique to machines with no
+# service manager, and it is paid on the blocking call.
+#
+# WHAT WILL NEVER BE MEASURED HERE, AND WHY THAT IS A DECISION RATHER THAN A BACKLOG. The
+# rows below need machines this project does not have and is not going to get; WSL2 is the
+# closest it will ever come to a real box. So they are ACCEPTED from upstream rather than
+# pursued — a decision, not a promise. Stated as the decision itself and not as the state of
+# a tracker: an issue can be reopened, relabelled or migrated, and a config comment asserting
+# "this is closed" would then be quietly false. The reasoning, the numbers and the four rows
+# are recorded in dotgibson/dotfiles-core#352, which this supersedes rather than depends on:
+#
+#   musl on REAL HARDWARE     the musl figures are an Alpine container, which does not
+#                             settle scheduling or storage behaviour on a real Alpine box
+#   a real NFS/SMB home       the 9p figures are a high-latency non-local filesystem — a
+#                             proxy for a network home, not one, and this is the row where
+#                             upstream's contention claim is strongest
+#   bare metal                every figure above is one WSL2 host
+#   a real multi-pane session synthetic concurrent writers, not humans in tmux panes
+#
+# For those four, the rationale stays BORROWED from upstream, deliberately and on the record.
+# The mechanism itself is measured — that is what the tables above are — so what is borrowed
+# is its magnitude on hardware nobody here will run, not whether it exists. Anyone who does
+# have such a box can settle a row with `scripts/bench-atuin-daemon.sh`; nobody is waiting.
+#
+# HOW A MACHINE OPTS IN (the launcher is OS-native, so it lives in the OS repo, not here):
+#   systemd distros — install the user unit (examples/atuin-daemon.service),
+#                     `systemctl --user enable --now atuin-daemon`, then export
+#                     ATUIN_DAEMON__ENABLED=true from os/<os>.zsh.
+#   Alpine / macOS  — no systemd: export ATUIN_DAEMON__ENABLED=true together with
+#                     ATUIN_DAEMON__AUTOSTART=true and let atuin supervise its own
+#                     daemon (autostart is NOT compatible with systemd_socket).
+#   Windows         — out of scope; dotfiles-Windows vendors no core/.
+#
+# Safety net: zsh/00-tools.zsh probes the socket before the first prompt AND, throttled to at
+# most one connect a minute, for the life of the shell — because with the daemon enabled and
+# the socket absent or stale atuin does not fail, it DISCARDS. The first failed connect forces
+# the daemon OFF for that shell, permanently, so atuin writes SQLite directly; a daemon that
+# dies mid-session also prints one warning, since that shell's history plumbing changed under
+# a session still open (dotgibson/dotfiles-core#366). CORE_ATUIN_PROBE_INTERVAL tunes the
+# window. It cannot detect an ACCEPT-BUT-SILENT
+# socket, which is the shape of the indefinite freeze in atuinsh/atuin#3382 — so prefer the
+# plain always-running unit over systemd SOCKET ACTIVATION: activation keeps the socket
+# accepting while the daemon behind it is dead, which is precisely the undetectable state.
+[daemon]
+# enabled AND autostart ARE DELIBERATELY LEFT UNSET — writing them here, even as `false`,
+# is what BREAKS the per-machine opt-in. atuin builds its config as
+# defaults → Environment → config FILE (settings.rs: the file source is added *after* the
+# Environment one, and in the `config` crate the later source wins), so any key present in
+# this file SHADOWS its ATUIN_* override. With `enabled = false` written out, an OS layer
+# exporting ATUIN_DAEMON__ENABLED=true was silently ignored: verified against atuin 18.19.0
+# by stracing the client, which made ZERO connect() calls to the socket with the key
+# present and one with it absent.
+#
+# Leaving them unset costs nothing: atuin's own defaults are already
+# `daemon.enabled = false` / `daemon.autostart = false` (settings.rs:1515-1516), so Core
+# still ships the daemon OFF — it is just off by DEFAULT rather than off by ASSERTION, and
+# the env override can now actually reach it. scripts/test-core.sh pins this.
+#
+# The same trap applies to any future per-machine key: if a machine is meant to override it
+# via ATUIN_*, it must not be written here. Fleet-wide settings (the UX block above) are the
+# opposite case — those are asserted here on purpose.
+# sync_frequency = 300  # seconds between daemon-driven syncs (upstream default)
+# systemd_socket = false  # take the socket from systemd socket activation instead of socket_path
+# socket_path = "…/atuin.sock"  # LEFT UNSET on purpose: the default is $XDG_RUNTIME_DIR/atuin.sock
+                                # (falling back to the data dir where that is unset, e.g. macOS), and
+                                # an absolute path here would be an OS-specific value in a Core file.
