@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something in the Fedora layer is broken
+about: Something in the Debian/Ubuntu layer is broken
 title: ''
 labels: bug
 assignees: ''
@@ -22,7 +22,7 @@ assignees: ''
 
 ## Environment
 
-- Fedora release: <!-- `cat /etc/os-release | head -3` -->
+- Distro + release: <!-- `cat /etc/os-release | head -3` -->
 - WSL or bare metal / VM:
 - Running as: <!-- your user + sudo, or root -->
 - `core.lock` version: <!-- `grep core_version core.lock` -->

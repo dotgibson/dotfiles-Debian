@@ -1,6 +1,6 @@
-# Contributing to dotfiles-Fedora
+# Contributing to dotfiles-Debian
 
-This is the **OS-native layer for Fedora** in a three-layer dotfiles system, and the
+This is the **OS-native layer for the Debian family** in a three-layer dotfiles system, and the
 template the other Linux repos are stamped from. The contribution rules are therefore
 mostly *boundary* rules: the hard part is not writing the change, it is knowing which
 repo it belongs in.
@@ -30,13 +30,20 @@ Three things enforce this, deliberately overlapping:
 | If the change… | It belongs in |
 | --- | --- |
 | is identical on every machine (zsh, tmux, nvim, git, starship) | `dotfiles-core` |
-| changes with the **OS** (package manager, clipboard, paths, SELinux) | **here** |
+| changes with the **OS** (package manager, clipboard, paths, AppArmor) | **here** |
 | changes with the **operator** (offensive/defensive tooling) | `dotfiles-Kali` / `dotfiles-Defense` |
 
-Structural changes to the OS-native layout **start here** and propagate per
-[`core/PORTING-MATRIX.md`](core/PORTING-MATRIX.md). If your fix to `bootstrap.sh` would
-be identical on Arch and openSUSE, that is a strong signal it belongs in
-`core/lib/bootstrap-lib.sh` upstream instead.
+Structural changes to the OS-native layout start in **dotfiles-Fedora**, the template,
+and propagate per [`core/PORTING-MATRIX.md`](core/PORTING-MATRIX.md). If your fix to
+`bootstrap.sh` would be identical on Arch and openSUSE, that is a strong signal it
+belongs in `core/lib/bootstrap-lib.sh` upstream instead.
+
+One judgement call is specific to this repo: **does a tool belong in
+`install/packages.txt` or in `bootstrap.sh`?** It belongs in the manifest only if apt
+resolves it *at a version Core can use*. Ubuntu 24.04 is frozen, so "apt has it" is not
+the same question as "apt has a usable one" — `neovim` and `tree-sitter-cli` both
+resolve and both break the stack. Declare a floor (`# min:X.Y.Z`) when it matters, and
+move anything below it into `bootstrap.sh` as a pinned `verified_install`.
 
 ## Local development
 
@@ -64,7 +71,7 @@ checks must pass.
   `type(scope): summary` — e.g. `fix(bootstrap): resolve the escalator once`.
 - A user-visible change gets a `CHANGELOG.md` entry under `[Unreleased]` in the same commit.
 - Keep the reasoning. This codebase deliberately carries long comments explaining *why* a
-  guard exists (which crate actually ships the binary, which keyring dnf consults). If you
+  guard exists (which archive actually has the package, which keyring apt consults). If you
   change such a line, update the comment with it — those comments are the record of bugs
   that already cost someone an afternoon.
 
@@ -82,13 +89,21 @@ If you have a container runtime, the closest thing to a fresh box — and the ca
 regressed most often — is a **root** run with no `sudo` present:
 
 ```bash
-podman run --rm -v "$PWD:/repo" -w /repo fedora:latest bash -c './bootstrap.sh --links-only'
+podman run --rm -v "$PWD:/repo" -w /repo ubuntu:24.04 bash -c './bootstrap.sh --links-only'
 ```
 
-Re-run any full bootstrap **twice** and confirm the second run rebuilds nothing: the
-cargo/go presence guards are easy to break in a way that silently costs minutes per run.
+Re-run any full bootstrap **twice** and confirm the second run re-downloads nothing: the
+presence guards in front of every `verified_install` are easy to break in a way that
+silently costs bandwidth and minutes per run.
+
+Two package-level gates back that up:
+
+```bash
+make packages-check            # every name resolves, and clears its declared floor
+make tool-checksums            # every pinned asset still hashes to its pin
+```
 
 ## Reporting bugs
 
-Open an [issue](https://github.com/dotgibson/dotfiles-Fedora/issues). Security problems
+Open an [issue](https://github.com/dotgibson/dotfiles-Debian/issues). Security problems
 go through [`SECURITY.md`](SECURITY.md) instead — please don't file those publicly.

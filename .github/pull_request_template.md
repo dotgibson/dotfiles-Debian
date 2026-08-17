@@ -6,7 +6,7 @@
 
 <!-- The boundary rule this repo lives or dies by. Tick exactly one. -->
 
-- [ ] **Fedora-specific** — dnf/RPM Fusion/COPR, clipboard, SELinux, paths. Belongs here.
+- [ ] **Debian-family-specific** — apt, vendor apt repos, pinned assets, AppArmor, paths. Belongs here.
 - [ ] **Shared** — would be identical on Arch/openSUSE/Alpine/Gentoo. **This belongs in
       `dotfiles-core`** (`make audit` there, then `make sync`), not here.
 - [ ] **Sync PR** — vendors a new Core release into `core/`. No hand-edits.
@@ -23,7 +23,8 @@
 - [ ] `make check` — hermetic `--links-only` against a throwaway HOME
 - [ ] `make dry-run` — full plan, mutated nothing
 - [ ] Ran a real bootstrap; second run rebuilt nothing (no redundant cargo/go work)
-- [ ] Touches `install/packages.txt` — package names verified against a current Fedora release
+- [ ] Touches `install/packages.txt` — `make packages-check` run (names resolve AND clear their `# min:` floors)
+- [ ] Touches `install/tool-versions.env` — `make tool-checksums` run
 
 ## Notes for the reviewer
 

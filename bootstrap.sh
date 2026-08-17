@@ -343,35 +343,43 @@ fi
 #
 # FAIL-CLOSED by design: a missing pin, a failed download, or a hash mismatch SKIPS the
 # tool loudly rather than installing something unverified.
+#
+# NOTE the leading-underscore locals. This function writes its result back through a
+# CALLER-SUPPLIED variable NAME (`printf -v "$outvar"`), so any local it declares that
+# shares that name would shadow the caller's variable and swallow the result — bash has
+# no other scoping to save you. The callers pass `tmp`, so a local named `tmp` here
+# silently broke every single out-of-band install: the caller's path stayed empty, every
+# unpack was attempted on "/asset", and all of it surfaced only as "could not unpack".
+# Keep these prefixed, and keep them out of step with the caller's names.
 _vi_fetch() {
-  local bin="$1" url="$2" want="$3" outvar="$4"
-  command -v "$bin" >/dev/null 2>&1 && return 1
+  local _vi_bin="$1" _vi_url="$2" _vi_want="$3" _vi_outvar="$4"
+  command -v "$_vi_bin" >/dev/null 2>&1 && return 1
 
-  local arch; arch="$(uname -m)"
-  if [[ "$arch" != x86_64 ]]; then
-    note_fail "$bin: no pinned asset for $arch — install it by hand"
+  local _vi_arch; _vi_arch="$(uname -m)"
+  if [[ "$_vi_arch" != x86_64 ]]; then
+    note_fail "$_vi_bin: no pinned asset for $_vi_arch — install it by hand"
     return 1
   fi
-  if [[ -z "$want" || ! "$want" =~ ^[0-9a-f]{64}$ ]]; then
-    note_fail "$bin: no valid SHA-256 pin in install/tool-versions.env — SKIPPED"
+  if [[ -z "$_vi_want" || ! "$_vi_want" =~ ^[0-9a-f]{64}$ ]]; then
+    note_fail "$_vi_bin: no valid SHA-256 pin in install/tool-versions.env — SKIPPED"
     return 1
   fi
 
-  blib_say "$bin (pinned release asset, sha256-verified)"
-  local tmp; tmp="$(mktemp -d)" || return 1
-  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/asset" "$url"; then
-    note_fail "$bin: download failed ($url) — SKIPPED"
-    rm -rf "$tmp"; return 1
+  blib_say "$_vi_bin (pinned release asset, sha256-verified)"
+  local _vi_dir; _vi_dir="$(mktemp -d)" || return 1
+  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$_vi_dir/asset" "$_vi_url"; then
+    note_fail "$_vi_bin: download failed ($_vi_url) — SKIPPED"
+    rm -rf "$_vi_dir"; return 1
   fi
-  if ! printf '%s  %s\n' "$want" "$tmp/asset" | sha256sum -c - >/dev/null 2>&1; then
-    echo "   $bin: SHA-256 MISMATCH — refusing to install." >&2
-    echo "     expected $want" >&2
-    echo "     actual   $(sha256sum "$tmp/asset" | cut -d' ' -f1)" >&2
+  if ! printf '%s  %s\n' "$_vi_want" "$_vi_dir/asset" | sha256sum -c - >/dev/null 2>&1; then
+    echo "   $_vi_bin: SHA-256 MISMATCH — refusing to install." >&2
+    echo "     expected $_vi_want" >&2
+    echo "     actual   $(sha256sum "$_vi_dir/asset" | cut -d' ' -f1)" >&2
     echo "     If you just bumped the version, run scripts/update-tool-checksums.sh." >&2
-    note_fail "$bin: SHA-256 mismatch — SKIPPED"
-    rm -rf "$tmp"; return 1
+    note_fail "$_vi_bin: SHA-256 mismatch — SKIPPED"
+    rm -rf "$_vi_dir"; return 1
   fi
-  printf -v "$outvar" '%s' "$tmp"
+  printf -v "$_vi_outvar" '%s' "$_vi_dir"
   return 0
 }
 

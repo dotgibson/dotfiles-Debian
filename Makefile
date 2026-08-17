@@ -40,9 +40,14 @@ syntax: ## bash -n the repo-owned bash, and check --help still works
 	@bash bootstrap.sh --help >/dev/null || { echo "bootstrap.sh --help failed"; exit 1; }
 
 zsh-syntax: ## zsh -n the repo-owned zsh modules (shellcheck has no zsh mode)
-	@command -v zsh >/dev/null 2>&1 || { echo "zsh not installed — skipping"; exit 0; }
-	@test -n "$(ZSH_FILES)" || { echo "no repo-owned .zsh"; exit 0; }
-	@for f in $(ZSH_FILES); do echo "zsh -n $$f"; zsh -n "$$f" || exit 1; done
+	@# ONE recipe line, deliberately. make runs each line in its own shell, so the
+	@# `exit 0` in a multi-line version only ends THAT line — the guard printed
+	@# "skipping" and then the next line ran `zsh -n` anyway and failed. Joining them
+	@# makes the skip a real skip. (Inherited from the template's Makefile; the same
+	@# shape is still in the other OS repos' copies.)
+	@if ! command -v zsh >/dev/null 2>&1; then echo "zsh not installed — skipping"; \
+	elif test -z "$(ZSH_FILES)"; then echo "no repo-owned .zsh"; \
+	else for f in $(ZSH_FILES); do echo "zsh -n $$f"; zsh -n "$$f" || exit 1; done; fi
 
 markdown: ## markdownlint the repo-owned docs (shares .markdownlint.jsonc with Core)
 	@command -v markdownlint-cli2 >/dev/null 2>&1 \

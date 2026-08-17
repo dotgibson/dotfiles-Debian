@@ -22,19 +22,19 @@
     <img src="https://raw.githubusercontent.com/dotgibson/.github/main/profile/logo.png" alt="Logo" width="80" height="80">
   </a>
 
-  <h3 align="center">🎩 dotfiles-Fedora</h3>
+  <h3 align="center">🎩 dotfiles-Debian</h3>
 
   <p align="center">
-    The Fedora OS-native layer — and the template every other Linux repo is stamped from.
+    The Debian-family OS-native layer — targeting Ubuntu 24.04 LTS.
     <br />
     <a href="https://dotgibson.github.io/dotfiles-web/docs"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     <a href="https://dotgibson.github.io/dotfiles-web/playground/">View Demo</a>
     &middot;
-    <a href="https://github.com/dotgibson/dotfiles-Fedora/issues/new?labels=bug">Report Bug</a>
+    <a href="https://github.com/dotgibson/dotfiles-Debian/issues/new?labels=bug">Report Bug</a>
     &middot;
-    <a href="https://github.com/dotgibson/dotfiles-Fedora/issues/new?labels=enhancement">Request Feature</a>
+    <a href="https://github.com/dotgibson/dotfiles-Debian/issues/new?labels=enhancement">Request Feature</a>
   </p>
 </div>
 
@@ -60,17 +60,28 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-**`dotfiles-Fedora` is the OS-native layer for Fedora** — one node in a
+**`dotfiles-Debian` is the OS-native layer for the Debian family** — one node in a
 cross-platform dotfiles system. The shared **Core** (zsh, tmux, Neovim, git,
 starship, mise) is authored once in
 [`dotfiles-core`](https://github.com/dotgibson/dotfiles-core) and vendored under
 `core/` via `git subtree`, so a clone is self-contained. This repo adds only what
-is genuinely Fedora: `dnf` + RPM Fusion, Flathub, the Wayland clipboard shim, and
-SELinux helpers.
+is genuinely Debian-family: the `apt` package list, the out-of-band installs that
+a frozen archive forces, paths, and AppArmor helpers.
 
-It is also the **template** the other Linux repos are stamped from — swap the
-package manager and clipboard backend, keep the structure. The full docs live on
-the [documentation site][docs].
+**Target: Ubuntu 24.04 LTS (noble).** CI proves `ubuntu:24.04` and, because the
+repo is named for the family rather than one distro, `debian:trixie` as well.
+Derivatives (Mint, Pop!_OS, Raspbian) report `ID_LIKE=debian` and need
+`--force-os` — they will probably work, they are just not gated.
+
+### Why this repo installs so much outside apt
+
+Ubuntu LTS froze in April 2024, and every other Linux repo in this fleet targets a
+rolling or near-rolling distro. So more of the stack falls outside apt here than
+anywhere else in the system — most sharply **neovim** (noble ships 0.9.5; Core's
+pinned nvim-treesitter needs 0.12) and **tree-sitter-cli** (noble 0.20.8, floor
+0.26.1). Those arrive as pinned, SHA-256-verified upstream release assets, never
+`curl | sh`; see `install/tool-versions.env`. That is a property of the release
+date, not a design choice. The full docs live on the [documentation site][docs].
 
 The system is three layers, each building on the one below:
 
@@ -87,11 +98,9 @@ No new languages — this layer is shell and package config over
 
 ### Tools
 
-- [![Fedora][fedora-shield]][fedora-url]
-- [![DNF][dnf-shield]][dnf-url]
-- [![RPM Fusion][rpmfusion-shield]][rpmfusion-url]
-- [![Flatpak][flatpak-shield]][flatpak-url]
-- [![Wayland][wayland-shield]][wayland-url]
+- [![Ubuntu][ubuntu-shield]][ubuntu-url]
+- [![Debian][debian-shield]][debian-url]
+- [![APT][apt-shield]][apt-url]
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -100,22 +109,23 @@ No new languages — this layer is shell and package config over
 
 ### Prerequisites
 
-A Fedora box (Workstation, Server, or a WSL image) and **Git**. Everything else —
+An Ubuntu 24.04 LTS box (Desktop or Server) or Debian trixie, and **Git**. Everything else —
 zsh, tmux, nvim, starship, and the modern-CLI stack — is provisioned by
 `bootstrap.sh`.
 
 ### Installation
 
 ```bash
-git clone https://github.com/dotgibson/dotfiles-Fedora ~/dotfiles-Fedora
-cd ~/dotfiles-Fedora
+git clone https://github.com/dotgibson/dotfiles-Debian ~/dotfiles-Debian
+cd ~/dotfiles-Debian
 ./bootstrap.sh
 exec zsh
 ```
 
 `core/` is a vendored subtree and is **already present** in a clone — there is no
-submodule step. `bootstrap.sh` is idempotent: it provisions `dnf` packages and
-symlinks Core + the Fedora layer into place.
+submodule step. `bootstrap.sh` is idempotent: it provisions `apt` packages, installs
+the pinned upstream assets apt cannot supply, and symlinks Core + the Debian layer
+into place.
 
 Not sure what it will do to a machine that already has dotfiles? Preview it — this
 changes nothing:
@@ -127,11 +137,12 @@ changes nothing:
 | Flag | Effect |
 | --- | --- |
 | `--dry-run` | Print the full plan (packages *and* symlinks); mutate nothing |
-| `--links-only` | Re-link only — no `dnf`, no downloads |
-| `--no-flatpak` | Skip Flathub (recommended on WSL) |
+| `--links-only` | Re-link only — no `apt`, no downloads |
+| `--no-upgrade` | `apt update` but skip the `full-upgrade` |
+| `--no-unattended` | Don't configure `unattended-upgrades` |
 | `--only` / `--skip` | Restrict wiring to module groups: `zsh nvim tmux git prompt tools` |
 | `--strict` | Exit non-zero if any best-effort step failed |
-| `--force-os` | Allow a Fedora-*like* distro (RHEL/Alma/Rocky/Nobara) |
+| `--force-os` | Allow a Debian-*like* distro (Mint, Pop!_OS, Raspbian) |
 
 It needs root only to install packages, and resolves that once — running as root
 (a container, a WSL first boot) works with no `sudo` installed at all. Existing files
@@ -143,23 +154,44 @@ are always backed up to `<file>.pre-dotfiles.<epoch>` before being replaced.
 ## What's In This Layer
 
 Only what changes with the OS. The heavy lifting — the shell modules, editor, and
-prompt — comes from vendored Core; this repo owns the Fedora specifics:
+prompt — comes from vendored Core; this repo owns the Debian-family specifics:
 
-- `bootstrap.sh` — `dnf` provision + Core/OS symlink wiring (idempotent)
-- `install/packages.txt` — the `dnf` package list (modern CLI stack), verified against
-  every supported Fedora release by the `packages` workflow
-- `os/fedora.zsh` — clipboard + package-manager aliases → `~/.config/zsh/80-os.zsh`
-- `os/fedora.conf` / `os/fedora.gitconfig` — the tmux + git OS overlays
-- `wsl/wsl.conf` — the WSL boot config (systemd, default user, interop)
-- `aliases.md` — the Fedora alias cheat sheet ([`core/aliases.md`](core/aliases.md) covers
+- `bootstrap.sh` — `apt` provision + the pinned out-of-band installs + Core/OS
+  symlink wiring (idempotent)
+- `install/packages.txt` — only what apt can honestly satisfy, with `# min:` version
+  floors; both resolution and floors are gated by the `packages` workflow on
+  `ubuntu:24.04` and `debian:trixie`
+- `install/tool-versions.env` — the pinned, SHA-256-verified upstream assets
+  (`scripts/update-tool-checksums.sh` refreshes them; `--latest` reports newer releases)
+- `test/check-packages.sh` — the resolution + floor gate, also `make packages-check`
+- `os/debian.zsh` — apt/AppArmor/unattended-upgrades aliases → `~/.config/zsh/80-os.zsh`
+- `os/debian.conf` / `os/debian.gitconfig` — the tmux + git OS overlays
+- `aliases.md` — the Debian alias cheat sheet ([`core/aliases.md`](core/aliases.md) covers
   the universal ones)
 - `core/` — vendored from `dotfiles-core` (read-only here; edit upstream)
 
-The things that actually bite on Fedora — dnf5, RPM Fusion, the Wayland clipboard
-shim, and SELinux (`se-restore` / `se-denials` / `se-why`) — are written up on
+The things that actually bite here — a frozen archive, `needrestart` hanging an
+unattended `apt`, and the headless clipboard gap below — are written up on
 the hub, alongside the per-distro **[porting matrix][porting]**:
 
-> **[→ dotfiles-Fedora on the documentation hub][repo-docs]**
+> **[→ dotfiles-Debian on the documentation hub][repo-docs]**
+
+### Headless clipboard — a known gap
+
+These boxes are SSH-only, so `wl-clipboard`/`xclip` are deliberately not installed:
+there is no display for them to talk to. Core's `clip` detects WSL → macOS → Wayland
+→ X11 and, finding none of them, exits 1. That leaves `pbcopy`/`pbpaste` and tmux
+`copy-pipe` non-functional.
+
+Neovim looks like it should be fine — `core/nvim/lua/gerrrt/config/clipboard.lua`
+carries an OSC 52 fallback for precisely this case — but it is not: that fallback is
+the `elseif` branch, taken only when `clip` is *absent*. Bootstrap puts `clip` on
+PATH, so the first branch wins and `"+y` routes through a script that always fails.
+
+The fix belongs in `core/bin/clip` (an OSC 52 fallback would restore zsh, tmux and
+nvim together) and is tracked upstream in `dotfiles-core`, since that file is
+vendored fleet-wide. If you need the clipboard on a particular box before then,
+`sudo apt install xclip` and use `ssh -X`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -171,7 +203,7 @@ This is an **OS-native layer**, so the contribution rule is a boundary rule:
 1. **Never hand-edit `core/`.** It is a vendored copy of `dotfiles-core` and is
    overwritten on the next sync. Fix shared config **upstream** in
    `dotfiles-core`, run `make audit` there, then `make sync` fans it out here.
-2. **Keep changes genuinely Fedora.** If it would be identical on every distro,
+2. **Keep changes genuinely Debian-family.** If it would be identical on every distro,
    it belongs in Core; if it changes with the operator, it belongs in a role repo.
 3. **Green the lint gate.** This repo's CI runs shellcheck + `bash -n` / `zsh -n`
    on the repo-owned shell (the vendored `core/` is excluded — it is gated
@@ -185,12 +217,12 @@ make hooks    # install the pre-commit hooks (shellcheck, markdownlint, gitleaks
 ```
 
 Full details in [`CONTRIBUTING.md`](CONTRIBUTING.md); the trust decisions
-`bootstrap.sh` makes when it reaches outside `dnf` are documented in
+`bootstrap.sh` makes when it reaches outside `apt` are documented in
 [`SECURITY.md`](SECURITY.md).
 
 Structural changes to the OS-native layout start here and propagate per the
 [porting matrix][porting]. Bugs and ideas: open an
-[issue](https://github.com/dotgibson/dotfiles-Fedora/issues).
+[issue](https://github.com/dotgibson/dotfiles-Debian/issues).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -211,31 +243,28 @@ Project Link: [dotgibson](https://github.com/dotgibson/)
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- Markdown Links & Images -->
-[repo-docs]: https://dotgibson.github.io/dotfiles-web/docs/repos/dotfiles-Fedora
+[repo-docs]: https://dotgibson.github.io/dotfiles-web/docs/repos/dotfiles-Debian
 [porting]: https://dotgibson.github.io/dotfiles-web/docs/reference/porting-matrix
 [dotgibson-shield]: https://img.shields.io/github/v/release/dotgibson/dotfiles-core?style=flat-square&label=dotgibson&labelColor=181717&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAF1klEQVR4nLSWbUxT7RnHr9PT09MXSltaoC9QXkqR16Iwhb0Iw8VYYE7jPri5aBaZzpmFZbpolpn4QeMyM%2BM%2B7MVt0Q9LNJIlxCzqxGWS6aKAig51vBQKIi3QltpCS0%2Fbc879pD1N3%2Bnz4fG5Pl2977v%2F331d131f5%2BZrddWQZAgAgy9uCRlefICzT6GeIsP%2FXF15kahmu9JglGmLRQoRQdIQWgu77BuWGe%2Fo%2BOqym8odApaWomTT1%2Bl2HqirahaTuJ9kQMggkgYhDRGfRiQDZBi9fuf52%2BD7l1b3ZhRcmq%2FMnBHmibuO7fvWoTalVoDjQRwL8RGgEOtzB0MbtBDnkRjGR0AgTK%2BQfNukr1LKXlhXKZpJSxTKGoFSq9vf16tQ8%2FiEh094Vu0L449mLGMup20DRWuFYVCiFm%2BvU36nTbOlMB%2BnCDxIOBzhvv6nFpc3TS0dUKDRHzh1Jk9O8wlPYN326Oa%2FJobnN8shAOxqKjrdXa8WSnGKWPewR%2FuHLG5P8oKUFJHi%2FH19F6UKEQ%2BnbJap27%2B%2BtWR15VAHgLkV%2F%2F0xW6OuQCfNE4PgmyX6f0xZKYbJDuj43lmtoYqHU%2FaZdwNXr4eoUG51zqgw%2B%2FCtrbm0UCeRynBhqVj2YC4RNC%2FuqStbKkydAODzeO7%2B6QYTpnOIYgB729R729RY9DAGafb0wDOHLwAA5vKK1mJNFoCpsxeLLn%2Fy91uU359719%2FfVXL%2BSM35IzU9rcXciCcQujz0imOfbGhOB0jkGo2hFQBW7Quzr0Zzq6vyBT%2FuKY%2BHErfBmQWLK1Lhr6l1OkleCqC0poPb%2FuTwv3OrA8DPDhgkokgLmLX77o86kqcGJmaj5xjr1JWlAAr1Js75MDEGAAI%2B1mvWX%2F1JY29XmYDPS5ZoNsrM24si1xSh3%2FRbGBYlz%2F73g41ztqliqYv1onyVHgDocMjjXASAKycavlqnZBHa2ajcasjv%2B8MbAPhRV9nI5MezB41crIPPHWOW9Gtl9XhDDCMCokIqSwGQ4shvyucFhEQCnqlSdm9k%2BdKt6XM%2FqO7aof7t8YbIIW5SHdpVIhUTAOAP0L8bmM3MHgJwByidQCgnhSmAqOEYnQ8AgRBr%2FuUzKsgggIs3pyVCfkeTCgAmFtaNOgm39C%2F3511r2W8JYvIAJbIaAwQ3vKAEoVgRaTQIBYKxqxgMs6euvdUXiQDgeHd5rV7K1fb2kC2rOgaYghQBMJ5grI3HUGuuhQiNIOWq8sy%2FLTgCKplgT0ZtCyprWw7%2FvKCyNr6yQqYg8cim59a9KQDnwv84R1%2F99UwAzsMya4vxeOYLN7YePGG%2BcAPjxXS%2BoavknFfOlRTAh8nHKNqLa1v2ZwK6dxQZtHk5ahu3%2FcYmLsoh%2B%2FsUgN%2BztDQzEvkYFBurGnan%2FS1%2B1P98L1FbxLIPzh193X%2FtwbmjiGUBYHd5nVFRCABPlxdtfh%2B3LHGKxof%2Bqo90C6yj58yi9Tm1kWjr94ZXsGhTuDuynAx2z0245yY4X06Kf9HWFd0N%2BuPbsUR64%2B3a57Erig2qIoOIlJSUNE69GWTZRFufXvRNL%2Fo2ywyJE1fMP6xWqHBEP5yfvP7%2FbAAAsFufG01mkVCqkGvLyrbNTD2mw9kfDckmE0oudx9rUZfhiF5Zd%2F%2F00QDF0NkBTJhanB3e0riHJIRKhXarqWfdu%2Bx0WnOot1ftuNR90lhQzEO0L7B2YvCm3b%2BWNI%2ByffSLq757%2BPcquYaIvBtgdcXycuzO9MzTFdccd9IwDNMVlDaXbzPXtxsVhQRDEQzl8i6d%2Buf12Y%2BONDVMo6vOfHWJxHLz3l811u8WAEZABCNAAHSI8n8k2HABKRJjLJ8JECxFMAE%2BHXhiGb7yn35vcCNDKVsEcSuv%2BEpn%2B7Etla0CwAQIOBLBhrkt85kAnwm8mX95e%2FTOa9vUZiIxQI43r0Kura9uN5SYNMoyuVDGZ2nK73C65iy28Rezo44152bSKYAvz3ifVA1lDn0WAAD%2F%2F%2FWvXexgMwqgAAAAAElFTkSuQmCC
 [dotgibson-url]: https://github.com/dotgibson/dotfiles-core/releases/latest
-[ci-shield]: https://img.shields.io/github/actions/workflow/status/dotgibson/dotfiles-Fedora/lint.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI
-[ci-url]: https://github.com/dotgibson/dotfiles-Fedora/actions/workflows/lint.yml
-[lastcommit-shield]: https://img.shields.io/github/last-commit/dotgibson/dotfiles-Fedora?branch=main&style=flat-square&logo=git&logoColor=white
-[contributors-shield]: https://img.shields.io/github/contributors/dotgibson/dotfiles-Fedora.svg?style=flat-square&logo=github
-[contributors-url]: https://github.com/dotgibson/dotfiles-Fedora/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/dotgibson/dotfiles-Fedora.svg?style=flat-square&logo=github
-[forks-url]: https://github.com/dotgibson/dotfiles-Fedora/network/members
-[stars-shield]: https://img.shields.io/github/stars/dotgibson/dotfiles-Fedora.svg?style=flat-square&logo=github
-[stars-url]: https://github.com/dotgibson/dotfiles-Fedora/stargazers
-[issues-shield]: https://img.shields.io/github/issues/dotgibson/dotfiles-Fedora?style=flat-square&logo=github
-[issues-url]: https://github.com/dotgibson/dotfiles-Fedora/issues
-[license-shield]: https://img.shields.io/github/license/dotgibson/dotfiles-Fedora.svg?style=flat-square
-[license-url]: https://github.com/dotgibson/dotfiles-Fedora/blob/main/LICENSE
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/dotgibson/dotfiles-Debian/lint.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI
+[ci-url]: https://github.com/dotgibson/dotfiles-Debian/actions/workflows/lint.yml
+[lastcommit-shield]: https://img.shields.io/github/last-commit/dotgibson/dotfiles-Debian?branch=main&style=flat-square&logo=git&logoColor=white
+[contributors-shield]: https://img.shields.io/github/contributors/dotgibson/dotfiles-Debian.svg?style=flat-square&logo=github
+[contributors-url]: https://github.com/dotgibson/dotfiles-Debian/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/dotgibson/dotfiles-Debian.svg?style=flat-square&logo=github
+[forks-url]: https://github.com/dotgibson/dotfiles-Debian/network/members
+[stars-shield]: https://img.shields.io/github/stars/dotgibson/dotfiles-Debian.svg?style=flat-square&logo=github
+[stars-url]: https://github.com/dotgibson/dotfiles-Debian/stargazers
+[issues-shield]: https://img.shields.io/github/issues/dotgibson/dotfiles-Debian?style=flat-square&logo=github
+[issues-url]: https://github.com/dotgibson/dotfiles-Debian/issues
+[license-shield]: https://img.shields.io/github/license/dotgibson/dotfiles-Debian.svg?style=flat-square
+[license-url]: https://github.com/dotgibson/dotfiles-Debian/blob/main/LICENSE
 [docs]: https://dotgibson.github.io/dotfiles-web/docs
-[fedora-shield]: https://img.shields.io/badge/Fedora-51A2DA?style=flat-square&logo=fedora&logoColor=white
-[fedora-url]: https://fedoraproject.org
-[dnf-shield]: https://img.shields.io/github/v/release/rpm-software-management/dnf5?style=flat-square&logo=gnometerminal&logoColor=24283B&label=DNF&labelColor=BB9AF7&color=3D59A1
-[dnf-url]: https://github.com/rpm-software-management/dnf5
-[rpmfusion-shield]: https://img.shields.io/badge/RPM_Fusion-425265?style=flat-square
-[rpmfusion-url]: https://rpmfusion.org
-[flatpak-shield]: https://img.shields.io/github/v/release/flatpak/flatpak?style=flat-square&logo=flatpak&logoColor=white&label=Flatpak&labelColor=4A90D9&color=3D59A1
-[flatpak-url]: https://github.com/flatpak/flatpak
-[wayland-shield]: https://img.shields.io/badge/Wayland-FFBC00?style=flat-square&logo=wayland&logoColor=black
-[wayland-url]: https://wayland.freedesktop.org
+[ubuntu-shield]: https://img.shields.io/badge/Ubuntu_24.04_LTS-E95420?style=flat-square&logo=ubuntu&logoColor=white
+[ubuntu-url]: https://ubuntu.com
+[debian-shield]: https://img.shields.io/badge/Debian-A81D33?style=flat-square&logo=debian&logoColor=white
+[debian-url]: https://www.debian.org
+[apt-shield]: https://img.shields.io/badge/APT-BB9AF7?style=flat-square&logo=gnometerminal&logoColor=24283B&labelColor=BB9AF7&color=3D59A1
+[apt-url]: https://wiki.debian.org/Apt
+

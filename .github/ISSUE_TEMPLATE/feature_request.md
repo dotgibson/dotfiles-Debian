@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest something for the Fedora layer
+about: Suggest something for the Debian/Ubuntu layer
 title: ''
 labels: enhancement
 assignees: ''
@@ -12,7 +12,7 @@ assignees: ''
 
 ## Which layer?
 
-- [ ] Genuinely **Fedora-specific** (dnf, RPM Fusion, COPR, Flatpak, SELinux, Wayland,
+- [ ] Genuinely **Debian-family-specific** (apt, vendor apt repos, AppArmor,
       WSL interop) — belongs here.
 - [ ] Would be **identical on every distro** — belongs in
       [dotfiles-core](https://github.com/dotgibson/dotfiles-core/issues).
@@ -21,11 +21,12 @@ assignees: ''
 
 ## If this adds a tool
 
-- Package name on Fedora (or why it isn't packaged): <!-- `dnf provides` / `dnf search` -->
-- If not packaged, the install route: cargo / go / COPR / upstream RPM / install script
+- Package name on Ubuntu 24.04 (or why it isn't packaged): <!-- `apt-cache policy <pkg>` -->
+- If packaged but too old, the candidate version vs what Core needs: <!-- `apt-cache policy` -->
+- If not packaged, the install route: pinned release asset / vendor apt repo / go install
 - Does Core already probe for it (`core-doctor`)?
 
-> Anything installed outside `dnf` is a trust decision that gets recorded in
+> Anything installed outside `apt` is a trust decision that gets recorded in
 > [SECURITY.md](../SECURITY.md) — please say which route you'd expect.
 
 ## Alternatives considered
