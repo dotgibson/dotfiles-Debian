@@ -68,3 +68,23 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      # A bash RETURN trap is a GLOBAL slot, not a function-scoped one. Arm one inside a
+      # function and it stays armed in the CALLER's frame, firing a second time when the
+      # caller returns — where the local it cleans up no longer exists and `set -u` makes
+      # it fatal. That is exactly how bootstrap.sh came to abort at the moment provision()
+      # returned, having already done all of its work, so wire_links never ran.
+      #
+      # Nothing else here can see it: it is valid syntax, so shellcheck and `bash -n` pass,
+      # and every CI bootstrap job runs --links-only and never enters provision(). This
+      # hook and `make trap-guard` are the only gates that catch it.
+      - id: return-trap-disarmed
+        name: refuse a RETURN trap that does not disarm itself
+        entry: |
+          bash -c 'if grep -nE "^[[:space:]]*trap[[:space:]].*[[:space:]]RETURN([[:space:]]|$)" "$@" | grep -v "trap - RETURN"; then
+            echo "^ a RETURN trap must disarm itself — make its body start with:  trap - RETURN;" >&2;
+            echo "  otherwise it leaks into the caller frame and fires again on ITS return." >&2;
+            exit 1;
+          fi' --
+        language: system
+        files: '\.sh$'
