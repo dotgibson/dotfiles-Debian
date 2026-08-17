@@ -608,6 +608,38 @@ provision() {
     fi
   fi
 
+  # ── atuin daemon: install the systemd user unit ─────────────────────────────
+  # os/debian.zsh exports ATUIN_DAEMON__ENABLED=true, and sets AUTOSTART only when there
+  # is NO systemd. Ubuntu HAS systemd, so without this block the daemon would be enabled
+  # with nothing to launch it — the one state core/PORTING-MATRIX.md's atuin note says is
+  # worth avoiding. Core's guard degrades safely (it probes the socket and forces the
+  # daemon off for that shell), so the cost is the lock relief rather than a broken shell,
+  # but "enabled and unlaunchable" is still the wrong thing to ship.
+  if command -v atuin >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    local unit_src="$DOTFILES/core/examples/atuin-daemon.service"
+    local unit_dst="$HOME/.config/systemd/user/atuin-daemon.service"
+    # Capability probe, not a version parse: an atuin too old to know `daemon` would let
+    # the unit start and fail on repeat, and the unit is Restart=on-failure/RestartSec=3 —
+    # i.e. a restart loop for as long as the box is up. Ask the binary, not a number.
+    if ! atuin daemon --help >/dev/null 2>&1; then
+      blib_warn "installed atuin has no 'daemon' subcommand (too old) — skipping the unit"
+    elif [[ -f "$unit_src" ]]; then
+      blib_say "atuin daemon (systemd user unit)"
+      if (mkdir -p "${unit_dst%/*}" 2>/dev/null && install -m 0644 "$unit_src" "$unit_dst" 2>/dev/null); then
+        systemctl --user daemon-reload >/dev/null 2>&1 || true
+        if systemctl --user enable --now atuin-daemon >/dev/null 2>&1; then
+          blib_ok "atuin-daemon enabled — 'loginctl enable-linger \"\$USER\"' keeps it up outside a login session"
+        else
+          # Never fatal, and on these boxes worth knowing: they are reached only over ssh,
+          # so without linger the daemon dies with the last session.
+          blib_warn "atuin-daemon not enabled (no user systemd session?) — shells fall back to direct SQLite writes"
+        fi
+      else
+        note_fail "atuin-daemon: could not write the user unit — SKIPPED"
+      fi
+    fi
+  fi
+
   # ── go-installed tools ──────────────────────────────────────────────────────
   # yq: noble's `yq` is kislyuk's PYTHON yq, and `yq-go` (mikefarah's, the jq-for-YAML
   # this stack means) does not exist in noble OR trixie — it is sid-only. So neither

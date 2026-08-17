@@ -267,4 +267,3 @@ Project Link: [dotgibson](https://github.com/dotgibson/)
 [debian-url]: https://www.debian.org
 [apt-shield]: https://img.shields.io/badge/APT-BB9AF7?style=flat-square&logo=gnometerminal&logoColor=24283B&labelColor=BB9AF7&color=3D59A1
 [apt-url]: https://wiki.debian.org/Apt
-
