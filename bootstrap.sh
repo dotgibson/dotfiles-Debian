@@ -772,6 +772,39 @@ provision() {
   else
     blib_say "skipping unattended-upgrades (--no-unattended)"
   fi
+
+  # ── WSL2: the distro-side /etc/wsl.conf ─────────────────────────────────────
+  # Only written when we are actually inside WSL — blib_is_wsl is Core's test, used
+  # here rather than re-rolling one (os/debian.zsh has a fork-free zsh twin for the
+  # per-shell case; this runs once, so the grep is free).
+  #
+  # systemd=true is the load-bearing line: without it there is no user session bus,
+  # and the atuin daemon unit this bootstrap installs above has nothing to run under.
+  #
+  # NOT idempotent in the useful sense — it overwrites /etc/wsl.conf every run. That
+  # is deliberate: the file is small, fully owned by this repo, and a half-edited one
+  # is worse than a replaced one. Anything hand-added there belongs in the repo copy.
+  if blib_is_wsl; then
+    blib_say "installing /etc/wsl.conf (systemd + default user + interop)"
+    local wsl_user
+    wsl_user="$(id -un)"
+    if [[ -r "$DOTFILES/wsl/wsl.conf" ]]; then
+      if sed "s/__WSL_USER__/$wsl_user/" "$DOTFILES/wsl/wsl.conf" |
+        priv tee /etc/wsl.conf >/dev/null; then
+        blib_ok "wsl.conf written — from Windows: 'wsl.exe --shutdown', then reopen the distro"
+      else
+        note_fail "could not write /etc/wsl.conf"
+      fi
+    else
+      note_fail "wsl/wsl.conf missing from the checkout — /etc/wsl.conf not written"
+    fi
+    # The counterpart lives on the Windows side and CANNOT be set from in here, so
+    # it can only ever be a pointer. Worth saying out loud: a listener inside WSL2
+    # is unreachable from the LAN until networkingMode=mirrored, and the symptom
+    # (connection refused from another host, works from the Windows host) sends
+    # people to debug the wrong layer entirely.
+    blib_say "NOTE: inbound listeners need mirrored networking — see wsl/windows.wslconfig.example"
+  fi
 }
 
 wire_links() {
@@ -823,6 +856,13 @@ elif ((BLIB_DRY)); then
   done
   unset _t
   ((DO_UNATTENDED)) && blib_say "would configure unattended-upgrades (security pocket)"
+  # The distro tier and the WSL step are both conditional, so a preview that omitted
+  # them would under-report on exactly the boxes where they matter.
+  blib_say "distro tier in effect: ID=${OS_ID:-unknown}"
+  if blib_is_wsl; then
+    blib_say "would write /etc/wsl.conf (systemd + default user=$(id -un) + interop)"
+    blib_say "would note: inbound listeners need mirrored networking (wsl/windows.wslconfig.example)"
+  fi
 else
   provision
   sudo_keepalive_stop
