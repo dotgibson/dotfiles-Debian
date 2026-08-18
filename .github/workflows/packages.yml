@@ -146,22 +146,53 @@ jobs:
 
       - name: Resolve every package name, and check declared version floors
         id: resolve
-        continue-on-error: ${{ matrix.blocking == false }}
+        # NO continue-on-error, deliberately, and this was a real trap. It does not merely
+        # keep the job green — it rewrites the STEP's recorded conclusion to `success` too.
+        # An advisory lane that had genuinely failed reported success at every level the
+        # API exposes: check run, job, and step. The exit-2 existed only in the log text,
+        # which is the one place nobody looks at on a green tick. A lane whose failures are
+        # invisible is worse than no lane, because it manufactures confidence.
+        #
+        # `exit 0` would have been no better — a chosen-zero reads as success identically.
+        #
+        # So the failure is now REAL at every level: the step fails, the job fails, the
+        # check goes red. What makes an advisory lane advisory is that NONE of these are
+        # required status checks on main, so a red one is loud without blocking a merge.
+        # That is the honest split: relax the GATING, never the REPORTING.
         run: |
           set -uo pipefail
           # check-packages.sh sources core/lib/{ux,bootstrap-lib}.sh. The vendored
           # core/ subtree is part of this checkout, so nothing else is needed.
           bash test/check-packages.sh install/packages.txt | tee /tmp/pkgreport.txt
           rc=${PIPESTATUS[0]}
+
+          # The summary is what a reader sees without opening the job, so it carries the
+          # verdict in its HEADING rather than burying it in a code block.
+          if [ "$rc" -eq 0 ]; then
+            head="✅ ${{ matrix.label }} — all names resolve"
+          elif [ "${{ matrix.blocking }}" = "true" ]; then
+            head="❌ ${{ matrix.label }} — BLOCKING lane failed (exit $rc)"
+          else
+            head="⚠️ ${{ matrix.label }} — advisory lane failed (exit $rc), not a required check"
+          fi
           {
-            echo "### ${{ matrix.label }}"
+            echo "### $head"
             echo
             echo '```'
             cat /tmp/pkgreport.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$rc" -ne 0 ] && [ "${{ matrix.blocking }}" != "true" ]; then
-            echo "::warning::advisory lane ${{ matrix.label }} reported drift (exit $rc) — not failing the build"
+
+          # An annotation too, so it surfaces on the PR's Checks tab without opening the
+          # summary. ::error:: even on an advisory lane: the finding IS an error — a name
+          # in the manifest does not exist on a target the manifest claims. Whether it
+          # blocks a merge is branch protection's call, not this message's.
+          if [ "$rc" -ne 0 ]; then
+            if [ "${{ matrix.blocking }}" = "true" ]; then
+              echo "::error::${{ matrix.label }}: package manifest does not resolve (exit $rc) — blocking lane"
+            else
+              echo "::error::${{ matrix.label }}: package manifest does not resolve (exit $rc) — advisory lane, red but not merge-blocking. A rolling archive can drop a name mid-migration; confirm before acting."
+            fi
           fi
           exit "$rc"
 
