@@ -323,6 +323,7 @@ sudo_keepalive_stop() {
 OUT_OF_BAND_TOOLS=(
   nvim tree-sitter starship lazygit atuin mise uv ty
   dust xh procs yq difft glow gum doggo sesh carapace op
+  delta hexyl
 )
 TOOL_PINS="$DOTFILES/install/tool-versions.env"
 if [[ -r "$TOOL_PINS" ]]; then
@@ -345,6 +346,8 @@ fi
 : "${XH_VERSION:=}" "${XH_SHA256:=}"
 : "${PROCS_VERSION:=}" "${PROCS_SHA256:=}"
 : "${DIFFT_VERSION:=}" "${DIFFT_SHA256:=}"
+: "${DELTA_VERSION:=}" "${DELTA_SHA256:=}"
+: "${HEXYL_VERSION:=}" "${HEXYL_SHA256:=}"
 # carapace is the one out-of-band tool with no SHA pin: it arrives as a signed .deb and
 # apt verifies it, so the pin here is only the version to fetch.
 : "${CARAPACE_VERSION:=}"
@@ -638,6 +641,22 @@ provision() {
   verified_install difft \
     "https://github.com/Wilfred/difftastic/releases/download/${DIFFT_VERSION}/difft-x86_64-unknown-linux-gnu.tar.gz" \
     "$DIFFT_SHA256"
+
+  # delta and hexyl — the two names apt has on noble and trixie but NOT on kali-rolling
+  # (proven by the kali packages lane, which is the only place that difference shows).
+  # They are `# skip:kali` in the manifest and land here instead.
+  #
+  # No distro conditional, on purpose. _vi_fetch returns early when `command -v <bin>`
+  # already answers, so on noble and trixie — where apt installed git-delta and hexyl
+  # minutes earlier in this same provision() — these two calls cost one PATH lookup and
+  # download nothing. On Kali the lookup misses and the pinned asset is fetched. Same
+  # guard that makes the `# only:kali` tier work, running in the opposite direction.
+  verified_install delta \
+    "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    "$DELTA_SHA256"
+  verified_install hexyl \
+    "https://github.com/sharkdp/hexyl/releases/download/v${HEXYL_VERSION}/hexyl-v${HEXYL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    "$HEXYL_SHA256"
 
   # ty — Astral's type checker. Prefer `uv tool install` (uv verifies its own downloads
   # and keeps ty upgradable in place); fall back to the pinned asset when uv is absent.

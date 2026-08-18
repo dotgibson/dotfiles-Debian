@@ -78,6 +78,8 @@ TOOLS=(
   "XH|ducaale/xh|v|xh-v\${V}-x86_64-unknown-linux-musl.tar.gz"
   "PROCS|dalance/procs|v|procs-v\${V}-x86_64-linux.zip"
   "DIFFT|Wilfred/difftastic||difft-x86_64-unknown-linux-gnu.tar.gz"
+  "DELTA|dandavison/delta||delta-\${V}-x86_64-unknown-linux-gnu.tar.gz"
+  "HEXYL|sharkdp/hexyl|v|hexyl-v\${V}-x86_64-unknown-linux-gnu.tar.gz"
 )
 # carapace is intentionally absent: it is a .deb whose integrity apt verifies on
 # install, so tool-versions.env pins only its version and there is no hash to refresh.

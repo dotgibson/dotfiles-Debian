@@ -43,7 +43,9 @@ fd-find                # find — binary: fdfind
 ripgrep                # grep
 zoxide                 # cd
 fzf                    # fuzzy finder
-git-delta              # git pager / diffs — binary: delta
+git-delta              # skip:kali — git pager / diffs; binary: delta. In apt on noble
+                       #             and trixie, ABSENT from kali-rolling, where it
+                       #             arrives as a pinned DELTA_VERSION asset instead.
 btop                   # top/htop
 tealdeer               # tldr client — binary: tldr
 
@@ -51,7 +53,9 @@ tealdeer               # tldr client — binary: tldr
 duf                    # df — disk usage/free
 sd                     # find & replace — note Fedora RETIRED this; noble still ships it
 gron                   # greppable JSON — likewise dropped on Fedora, present here
-hexyl                  # hex viewer
+hexyl                  # skip:kali — hex viewer, the stack's only binary-inspection verb.
+                       #             Same story as git-delta: in apt on noble and trixie,
+                       #             absent from kali-rolling, pinned HEXYL_VERSION there.
 #
 # NOT here, because noble does not have them at all — bootstrap.sh installs each as a
 # pinned release asset, a go binary, or from a vendor apt repo:
@@ -122,9 +126,12 @@ unattended-upgrades    # security-pocket auto-updates; these boxes are unattende
 # `go install`, or from a vendor apt repo. Kali's archive tracks sid and simply has
 # them, so there the distro build wins: fewer moving parts, and apt owns the upgrade.
 #
-# Provenance: this set is exactly dotfiles-Offense's former base list minus what this
-# repo already had — proven resolvable by that repo's own kali-rolling packages lane
-# before the OS-native layer moved here.
+# Provenance: dotfiles-Offense's former base list, minus what this repo already had,
+# minus what the kali packages lane then proved absent. `difftastic` was in the first
+# draft of this tier on the strength of being in that repo's list; the lane resolved it
+# against kali-rolling and it is not there, so it stays out-of-band like it always was.
+# That is the lane earning its keep on its very first run — the provenance of a list is
+# weaker evidence than resolving the name.
 #
 # The `# min:` floors ARE repeated here, and that is the whole reason this tier is safe.
 # A floor is a statement about what CORE needs, not about how old an archive is: nvim
@@ -143,7 +150,6 @@ lazygit                # only:kali   pinned LAZYGIT_VERSION elsewhere
 procs                  # only:kali   pinned PROCS_VERSION elsewhere
 xh                     # only:kali   pinned XH_VERSION elsewhere
 du-dust                # only:kali   binary stays `dust`; pinned DUST_VERSION elsewhere
-difftastic             # only:kali   binary: difft; pinned DIFFT_VERSION elsewhere
 yq-go                  # only:kali   mikefarah's Go yq. NOT plain `yq`, which is
                        #             kislyuk's Python one — installing that is worse
                        #             than installing none. `go install`ed elsewhere.
