@@ -34,12 +34,22 @@ on:
     paths:
       - 'install/packages.txt'
       - 'test/check-packages.sh'
+      # The distro tier decides WHICH names this workflow resolves, so a change to it
+      # changes the answer as surely as editing the manifest does. Omitting it would
+      # be the same silent incompleteness a path filter always fails by: nothing
+      # errors, the workflow simply does not run and the PR looks clean.
+      - 'scripts/pkg-filter.sh'
       - '.github/workflows/packages.yml'
   push:
     branches: [main]
     paths:
       - 'install/packages.txt'
       - 'test/check-packages.sh'
+      # The distro tier decides WHICH names this workflow resolves, so a change to it
+      # changes the answer as surely as editing the manifest does. Omitting it would
+      # be the same silent incompleteness a path filter always fails by: nothing
+      # errors, the workflow simply does not run and the PR looks clean.
+      - 'scripts/pkg-filter.sh'
       - '.github/workflows/packages.yml'
   schedule:
     # Tue 07:00 UTC — an unused fleet slot (Fedora packages is Sat 07:00, Kali's is
@@ -87,8 +97,37 @@ jobs:
           - image: "ubuntu:26.04"
             label: "ubuntu 26.04 (early warning)"
             blocking: false
+          # Kali: the rolling target, and the only lane that exercises the
+          # `# only:kali` tier at all. The other three resolve the untiered 32 names;
+          # this one resolves 47 and checks the two floors that ride the tier
+          # (neovim >= 0.12.0, tree-sitter-cli >= 0.26.1) — the floors that make
+          # tiering those packages in safe rather than a silent downgrade.
+          #
+          # ADVISORY. Kali tracks sid, where a package can vanish for days mid-
+          # migration through no fault of this repo; a hard gate would red unrelated
+          # PRs. Same reasoning as the 26.04 lane, opposite cause.
+          #
+          # Safe to add as a matrix entry, unlike bootstrap.yml: the check name here
+          # is `apt resolve (<label>)`, so a new lane adds a NAME rather than renaming
+          # the existing ones, and none of these are required checks anyway.
+          - image: "kalilinux/kali-rolling"
+            label: "kali rolling"
+            blocking: false
     container:
       image: ${{ matrix.image }}
+    # bash, EXPLICITLY. Inside a `container:` job the default shell is `sh`, not the
+    # `bash -e {0}` a runs-on job gets — and every step here is bash: `set -uo pipefail`,
+    # ${PIPESTATUS[0]}, arrays. Under dash the very first line dies with
+    # `set: Illegal option -o pipefail` and the job exits 2 before a single package is
+    # resolved, so the lane reported "failure" while having checked nothing at all.
+    #
+    # This workflow had never once passed: its only two runs — a scheduled one on main
+    # and the first PR run — both died here. It is path-filtered on install/packages.txt,
+    # so it fires rarely, and a red that only ever appears on a file nobody had touched
+    # in a while is a red nobody reads.
+    defaults:
+      run:
+        shell: bash
     env:
       DEBIAN_FRONTEND: noninteractive
       NEEDRESTART_MODE: a

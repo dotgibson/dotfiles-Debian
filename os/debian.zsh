@@ -110,6 +110,62 @@ if [[ -n ${HAVE_ATUIN:-} ]]; then
   [[ -d /run/systemd/system ]] || export ATUIN_DAEMON__AUTOSTART=true
 fi
 
+# ── WSL2 niceties ────────────────────────────────────────────────────────────
+# Kali under WSL2 is this repo's second-biggest deployment after the SSH-only
+# shelf boxes, since dotfiles-Offense stacks its Role layer on one. None of this is
+# Kali-specific though — it applies to any Debian-family distro under WSL.
+#
+# Detection is deliberately fork-free: WSL_DISTRO_NAME is set by WSL itself, and
+# the /proc/version fallback is read with zsh's $(<file) rather than grep, because
+# this runs on every interactive shell and Core's bench job holds startup to a
+# 120ms budget. (bootstrap.sh uses Core's blib_is_wsl for the same test in bash,
+# where the grep is fine — it runs once.)
+_IS_WSL=0
+if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+  _IS_WSL=1
+elif [[ -r /proc/version ]]; then
+  _pv="$(</proc/version)"; _pv=${_pv:l}
+  [[ "$_pv" == *microsoft* || "$_pv" == *wsl* ]] && _IS_WSL=1
+  unset _pv
+fi
+
+if (( _IS_WSL )); then
+  alias open='explorer.exe'
+  command -v wslview >/dev/null && alias xdg-open='wslview'
+
+  # cdwin — jump to the Windows user profile.
+  #
+  # A FUNCTION, not an alias, and this is the point. dotfiles-Offense shipped
+  #     [[ -n "${WINHOME:-}" ]] && alias cdwin='cd "$WINHOME"'
+  # but nothing in that repo, or in Core, ever set WINHOME — so the alias only
+  # existed for someone who had already exported it by hand, i.e. effectively never.
+  # Deriving it eagerly at startup is not the fix either: it costs a powershell.exe
+  # fork (~200ms+) on every single interactive shell, which is most of the startup
+  # budget for a path most shells never take.
+  #
+  # So resolve it lazily, on first use, and memoise. Falls back to /mnt/c/Users/$USER,
+  # which is right on the common setup and wrong quietly rather than loudly.
+  cdwin() {
+    if [[ -z "${WINHOME:-}" ]]; then
+      local up
+      up="$(powershell.exe -NoProfile -NonInteractive -Command '$env:USERPROFILE' 2>/dev/null | tr -d '\r')"
+      if [[ -n "$up" ]] && command -v wslpath >/dev/null 2>&1; then
+        WINHOME="$(wslpath "$up" 2>/dev/null)"
+      fi
+      [[ -d "${WINHOME:-}" ]] || WINHOME="/mnt/c/Users/$USER"
+      export WINHOME
+    fi
+    if [[ -d "$WINHOME" ]]; then
+      cd "$WINHOME"
+    else
+      print -u2 "cdwin: could not resolve the Windows profile (tried \$WINHOME, powershell.exe, /mnt/c/Users/$USER)"
+      return 1
+    fi
+  }
+fi
+
+unset _IS_WSL
+
 # ── auto-start/attach tmux for interactive terminals ─────────────────────────
 # This is the highest-value line in the file on an SSH-only box: every reconnect lands
 # back in the same session instead of a fresh shell, so a dropped link costs nothing.

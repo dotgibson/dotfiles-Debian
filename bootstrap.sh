@@ -105,6 +105,10 @@ unset _req
 source "$DOTFILES/core/lib/ux.sh"
 # shellcheck source=core/lib/bootstrap-lib.sh
 source "$DOTFILES/core/lib/bootstrap-lib.sh"
+# The distro tier for install/packages.txt (ubuntu / debian / kali). Sits in FRONT of
+# Core's blib_read_pkgs rather than replacing it — see scripts/pkg-filter.sh's header.
+# shellcheck source=scripts/pkg-filter.sh
+source "$DOTFILES/scripts/pkg-filter.sh"
 
 # Apply any --only/--skip module selection now the validator (blib_select) exists;
 # it aborts on a malformed selector or an unknown group.
@@ -128,23 +132,32 @@ note_fail() {
 # `grep -qi debian /etc/os-release` matches any incidental substring (a HOME_URL, a
 # PRETTY_NAME) and would sail a wholly unrelated distro past the guard.
 #
-# ubuntu and debian are BOTH first-class here — the repo is named for the family, and CI
-# proves ubuntu:24.04 (the target) plus debian:trixie (so an Ubuntu-only assumption or a
-# PPA reds a PR). Derivatives (Mint, Pop!_OS, Raspbian, Kali) report ID_LIKE=debian and are
-# a legitimate but DELIBERATE target: they need --force-os, because their package sets and
-# release cadence differ from the two we actually test.
+# ubuntu, debian and kali are ALL first-class here — the repo is named for the family, and
+# CI proves ubuntu:24.04 (the LTS target), debian:trixie (so an Ubuntu-only assumption or a
+# PPA reds a PR), and kalilinux/kali-rolling. Kali joined when dotfiles-Offense shed its
+# OS-native half to become a pure Role layer: the offensive repo now stacks ON this one
+# rather than carrying a duplicate apt layer of its own.
+#
+# Kali is the reason install/packages.txt is distro-tiered. It is a rolling sid derivative
+# while noble froze in April 2024, so a package this repo must fetch out-of-band on Ubuntu
+# is frequently just in apt on Kali — see the `# only:` / `# skip:` annotations there and
+# the apt-first checks around verified_install below.
+#
+# OTHER derivatives (Mint, Pop!_OS, Raspbian) still report ID_LIKE=debian and still need
+# --force-os: they are legitimate but DELIBERATELY untested, because their package sets and
+# release cadence differ from the three we actually prove in CI.
 _osr_field() { # <KEY> — the unquoted value of KEY in /etc/os-release ("" when absent)
   [[ -r /etc/os-release ]] || return 0
   sed -n "s/^$1=//p" /etc/os-release | head -1 | tr -d '"'"'"
 }
 OS_ID="$(_osr_field ID)"
 OS_ID_LIKE="$(_osr_field ID_LIKE)"
-if [[ "$OS_ID" != ubuntu && "$OS_ID" != debian ]]; then
+if [[ "$OS_ID" != ubuntu && "$OS_ID" != debian && "$OS_ID" != kali ]]; then
   if [[ " $OS_ID_LIKE " == *" debian "* ]]; then
     if ((FORCE_OS)); then
       blib_warn "ID=$OS_ID is only debian-LIKE — continuing under --force-os; package names may differ"
     else
-      echo "This bootstrap targets Ubuntu (ID=ubuntu) or Debian (ID=debian); this box reports ID=$OS_ID (ID_LIKE=$OS_ID_LIKE)." >&2
+      echo "This bootstrap targets Ubuntu (ID=ubuntu), Debian (ID=debian) or Kali (ID=kali); this box reports ID=$OS_ID (ID_LIKE=$OS_ID_LIKE)." >&2
       echo "Package availability differs there. Re-run with --force-os to proceed anyway." >&2
       exit 1
     fi
@@ -310,6 +323,7 @@ sudo_keepalive_stop() {
 OUT_OF_BAND_TOOLS=(
   nvim tree-sitter starship lazygit atuin mise uv ty
   dust xh procs yq difft glow gum doggo sesh carapace op
+  delta hexyl
 )
 TOOL_PINS="$DOTFILES/install/tool-versions.env"
 if [[ -r "$TOOL_PINS" ]]; then
@@ -332,6 +346,8 @@ fi
 : "${XH_VERSION:=}" "${XH_SHA256:=}"
 : "${PROCS_VERSION:=}" "${PROCS_SHA256:=}"
 : "${DIFFT_VERSION:=}" "${DIFFT_SHA256:=}"
+: "${DELTA_VERSION:=}" "${DELTA_SHA256:=}"
+: "${HEXYL_VERSION:=}" "${HEXYL_SHA256:=}"
 # carapace is the one out-of-band tool with no SHA pin: it arrives as a signed .deb and
 # apt verifies it, so the pin here is only the version to fetch.
 : "${CARAPACE_VERSION:=}"
@@ -521,7 +537,10 @@ provision() {
     exit 1
   }
   local -a base=()
-  mapfile -t base < <(blib_read_pkgs "$base_list")
+  # pkg_filter_lines drops the lines annotated for OTHER distros; blib_read_pkgs then
+  # turns what survives into names, exactly as it always did. Process substitution because
+  # blib_read_pkgs takes a path.
+  mapfile -t base < <(blib_read_pkgs <(pkg_filter_lines "$base_list" "$OS_ID"))
 
   sudo_keepalive_start
 
@@ -531,7 +550,9 @@ provision() {
   # images — but it is done unconditionally on Ubuntu so CI proves THIS SCRIPT'S
   # assumption rather than the container image's defaults. `add-apt-repository` lives in
   # software-properties-common, which is why that one package is installed ahead of the
-  # manifest. Guarded on ID=ubuntu: Debian has no `universe` component and the call errors.
+  # manifest. Guarded on ID=ubuntu because it is the ONLY target with that component:
+# Debian has no `universe`, and Kali ships `kali-rolling main contrib non-free
+# non-free-firmware` — on either, the call errors.
   if [[ "$OS_ID" == ubuntu ]]; then
     blib_say "apt update (pre-universe)"
     apt_get update -qq || note_fail "apt-get update failed"
@@ -554,6 +575,16 @@ provision() {
     apt_get update || note_fail "apt-get update failed"
   fi
 
+  # ORDER IS LOAD-BEARING: this must stay AHEAD of every out-of-band install below.
+  # Each of those is guarded by `command -v <binary>`, so on a distro where apt already
+  # supplied the tool the guard fires and the download no-ops. That is the whole
+  # mechanism behind install/packages.txt's `# only:kali` tier — Kali's archive tracks
+  # sid and simply has neovim/starship/lazygit/…, so apt lands them here and the pinned
+  # fetches skip themselves. No conditional is needed, and adding one would duplicate a
+  # guard that already exists and can drift from it.
+  #
+  # Reorder these two blocks and nothing errors — the guards just all miss, and Kali ends
+  # up with a pinned tarball shadowing its distro build. `make apt-first` pins the order.
   blib_say "apt base CLI stack (install/packages.txt)"
   apt_install "${base[@]}"
   blib_ok "base packages requested: ${#base[@]}"
@@ -610,6 +641,22 @@ provision() {
   verified_install difft \
     "https://github.com/Wilfred/difftastic/releases/download/${DIFFT_VERSION}/difft-x86_64-unknown-linux-gnu.tar.gz" \
     "$DIFFT_SHA256"
+
+  # delta and hexyl — the two names apt has on noble and trixie but NOT on kali-rolling
+  # (proven by the kali packages lane, which is the only place that difference shows).
+  # They are `# skip:kali` in the manifest and land here instead.
+  #
+  # No distro conditional, on purpose. _vi_fetch returns early when `command -v <bin>`
+  # already answers, so on noble and trixie — where apt installed git-delta and hexyl
+  # minutes earlier in this same provision() — these two calls cost one PATH lookup and
+  # download nothing. On Kali the lookup misses and the pinned asset is fetched. Same
+  # guard that makes the `# only:kali` tier work, running in the opposite direction.
+  verified_install delta \
+    "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    "$DELTA_SHA256"
+  verified_install hexyl \
+    "https://github.com/sharkdp/hexyl/releases/download/v${HEXYL_VERSION}/hexyl-v${HEXYL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    "$HEXYL_SHA256"
 
   # ty — Astral's type checker. Prefer `uv tool install` (uv verifies its own downloads
   # and keeps ty upgradable in place); fall back to the pinned asset when uv is absent.
@@ -744,6 +791,39 @@ provision() {
   else
     blib_say "skipping unattended-upgrades (--no-unattended)"
   fi
+
+  # ── WSL2: the distro-side /etc/wsl.conf ─────────────────────────────────────
+  # Only written when we are actually inside WSL — blib_is_wsl is Core's test, used
+  # here rather than re-rolling one (os/debian.zsh has a fork-free zsh twin for the
+  # per-shell case; this runs once, so the grep is free).
+  #
+  # systemd=true is the load-bearing line: without it there is no user session bus,
+  # and the atuin daemon unit this bootstrap installs above has nothing to run under.
+  #
+  # NOT idempotent in the useful sense — it overwrites /etc/wsl.conf every run. That
+  # is deliberate: the file is small, fully owned by this repo, and a half-edited one
+  # is worse than a replaced one. Anything hand-added there belongs in the repo copy.
+  if blib_is_wsl; then
+    blib_say "installing /etc/wsl.conf (systemd + default user + interop)"
+    local wsl_user
+    wsl_user="$(id -un)"
+    if [[ -r "$DOTFILES/wsl/wsl.conf" ]]; then
+      if sed "s/__WSL_USER__/$wsl_user/" "$DOTFILES/wsl/wsl.conf" |
+        priv tee /etc/wsl.conf >/dev/null; then
+        blib_ok "wsl.conf written — from Windows: 'wsl.exe --shutdown', then reopen the distro"
+      else
+        note_fail "could not write /etc/wsl.conf"
+      fi
+    else
+      note_fail "wsl/wsl.conf missing from the checkout — /etc/wsl.conf not written"
+    fi
+    # The counterpart lives on the Windows side and CANNOT be set from in here, so
+    # it can only ever be a pointer. Worth saying out loud: a listener inside WSL2
+    # is unreachable from the LAN until networkingMode=mirrored, and the symptom
+    # (connection refused from another host, works from the Windows host) sends
+    # people to debug the wrong layer entirely.
+    blib_say "NOTE: inbound listeners need mirrored networking — see wsl/windows.wslconfig.example"
+  fi
 }
 
 wire_links() {
@@ -784,7 +864,7 @@ elif ((BLIB_DRY)); then
   blib_say "would apt update$( ((DO_UPGRADE)) && printf ' + full-upgrade')"
   if [[ -f "$DOTFILES/install/packages.txt" ]]; then
     _dry_pkgs=()
-    mapfile -t _dry_pkgs < <(blib_read_pkgs "$DOTFILES/install/packages.txt")
+    mapfile -t _dry_pkgs < <(blib_read_pkgs <(pkg_filter_lines "$DOTFILES/install/packages.txt" "$OS_ID"))
     blib_say "would apt install ${#_dry_pkgs[@]} packages: ${_dry_pkgs[*]}"
     unset _dry_pkgs
   else
@@ -795,6 +875,13 @@ elif ((BLIB_DRY)); then
   done
   unset _t
   ((DO_UNATTENDED)) && blib_say "would configure unattended-upgrades (security pocket)"
+  # The distro tier and the WSL step are both conditional, so a preview that omitted
+  # them would under-report on exactly the boxes where they matter.
+  blib_say "distro tier in effect: ID=${OS_ID:-unknown}"
+  if blib_is_wsl; then
+    blib_say "would write /etc/wsl.conf (systemd + default user=$(id -un) + interop)"
+    blib_say "would note: inbound listeners need mirrored networking (wsl/windows.wslconfig.example)"
+  fi
 else
   provision
   sudo_keepalive_stop

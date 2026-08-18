@@ -9,12 +9,21 @@ rules (the load order, the "is it Core?" test, the manifest contract) see
 `dotfiles-Debian` is the **OS-native layer for the Debian family** in an
 **eleven-repo dotfiles system** built on a three-layer model (Core → OS-native →
 Role). Structurally it is stamped from the Fedora template (see
-`core/PORTING-MATRIX.md`); its apt idioms come from `dotfiles-Kali`, the fleet's
-other Debian-family repo.
+`core/PORTING-MATRIX.md`); its apt idioms came from `dotfiles-Offense` (formerly
+`dotfiles-Kali`), which has since handed its whole OS-native layer over to this
+repo on the way to becoming a pure Role layer.
 
-**The target is Ubuntu 24.04 LTS, on headless SSH-only boxes.** The repo is named
-for the family and CI proves both `ubuntu:24.04` and `debian:trixie`, but the
-package list and quirks are tuned to noble.
+**Three targets, and they do not share an archive age:**
+
+| target | archive | role here |
+| ------ | ------- | --------- |
+| **Ubuntu 24.04 LTS (noble)** | frozen April 2024 | the primary; headless SSH-only boxes |
+| **Debian trixie** | stable | proves the repo's name is not a lie |
+| **Kali rolling** | tracks sid | the box `dotfiles-Offense` stacks on, usually under WSL2 |
+
+That spread is the single most important thing to hold in your head here. Most of
+this repo exists to work around a **frozen** archive; Kali has none of that problem
+and a dozen of those workarounds are wrong there. Hence the distro tier below.
 
 ## The rule that bites
 
@@ -31,7 +40,9 @@ out-of-band installs, paths, and the bootstrap.
 This is the one thing that makes this repo different from every sibling. Ubuntu
 24.04 froze in **April 2024**; every other Linux repo in the fleet targets a
 rolling or near-rolling distro. So a large slice of the stack is either absent
-from `noble` or present at a version Core cannot use:
+from `noble` or present at a version Core cannot use — **on noble and trixie.
+Kali has almost all of them in apt**, which is what `install/packages.txt`'s
+`# only:kali` annotations are for (see "The distro tier" below):
 
 - **`neovim`** — noble ships **0.9.5**. Core's nvim pins nvim-treesitter to its
   `main` branch, which hard-requires **0.12** (`core/nvim/lua/gerrrt/config/providers.lua`).
@@ -52,6 +63,37 @@ in `install/packages.txt` only if apt really resolves it at a version Core can
 use.** Version floors are declared there as `# min:X.Y.Z` trailing comments and
 enforced by `test/check-packages.sh`; resolution alone is not enough, because
 noble resolves both of the broken packages above perfectly happily.
+
+## The distro tier: one manifest, three archives
+
+`install/packages.txt` is read through `scripts/pkg-filter.sh` before Core's
+`blib_read_pkgs` ever sees it. The grammar lives inside the existing trailing
+comment, so an unannotated line — most of the file — behaves exactly as it always
+did:
+
+```text
+name                     # applies to all three targets
+name    # only:kali      # ONLY these /etc/os-release IDs
+name    # skip:ubuntu    # everywhere EXCEPT these
+name    # only:kali,debian
+```
+
+Fifteen names carry `# only:kali`: the tools noble cannot supply and this repo
+therefore fetches as pinned tarballs, `go install`s or vendor-repo packages, all of
+which Kali just has. **On Kali they come from apt and the out-of-band fetch skips
+itself** — no conditional exists for that, and none is needed: `provision()` installs
+the apt list first and every out-of-band install is already `command -v`-guarded.
+That ordering is load-bearing and `make apt-first` enforces it.
+
+Two rules worth internalising before editing that file:
+
+- **Repeat the `# min:` floor on a tiered line.** A floor states what *Core* needs,
+  not how old an archive is. `neovim` below 0.12 breaks Core's pinned
+  nvim-treesitter whether it came from a frozen suite or a rolling one, so tiering
+  it in without `min:0.12.0` swaps a known-good pinned 0.12.4 for whatever apt has.
+- **`test/check-packages.sh` applies the same tier**, including in the floor loop.
+  It has to: `neovim min:0.12.0` evaluated on noble finds 0.9.5 and reports a
+  real-looking breach, reddening the lane it exists to certify.
 
 ## Three things not to "fix"
 
@@ -100,7 +142,11 @@ checks the declared floors, `tool-checksums` re-verifies the pinned assets, and
 
 ## Where things are
 
-- `os/debian.zsh` — apt/AppArmor/unattended-upgrades aliases, tmux auto-attach
+- `os/debian.zsh` — apt/AppArmor/unattended-upgrades aliases, tmux auto-attach, WSL2 bits
+- `scripts/pkg-filter.sh` — the distro tier for `install/packages.txt` (see above)
+- `wsl/` — `wsl.conf` (distro-side, installed by bootstrap when on WSL) and
+  `windows.wslconfig.example` (Windows-side; `networkingMode=mirrored` cannot be set
+  from inside the distro, which is the most common WSL misconfiguration there is)
 - `os/debian.conf`, `os/debian.gitconfig` — tmux + git OS overlays
 - `install/packages.txt` — only what apt can honestly satisfy (with `# min:` floors)
 - `install/tool-versions.env` — the pinned, SHA-256'd out-of-band assets
