@@ -89,6 +89,19 @@ jobs:
             blocking: false
     container:
       image: ${{ matrix.image }}
+    # bash, EXPLICITLY. Inside a `container:` job the default shell is `sh`, not the
+    # `bash -e {0}` a runs-on job gets — and every step here is bash: `set -uo pipefail`,
+    # ${PIPESTATUS[0]}, arrays. Under dash the very first line dies with
+    # `set: Illegal option -o pipefail` and the job exits 2 before a single package is
+    # resolved, so the lane reported "failure" while having checked nothing at all.
+    #
+    # This workflow had never once passed: its only two runs — a scheduled one on main
+    # and the first PR run — both died here. It is path-filtered on install/packages.txt,
+    # so it fires rarely, and a red that only ever appears on a file nobody had touched
+    # in a while is a red nobody reads.
+    defaults:
+      run:
+        shell: bash
     env:
       DEBIAN_FRONTEND: noninteractive
       NEEDRESTART_MODE: a
