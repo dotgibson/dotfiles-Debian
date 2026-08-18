@@ -30,7 +30,7 @@ help: ## Show this help
 	@grep -E '^[a-z][a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) \
 		| sed -E 's/:.*## /\t/' | sort | awk -F'\t' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-lint: shellcheck syntax zsh-syntax trap-guard ## The gate: shellcheck + bash -n + zsh -n + trap discipline
+lint: shellcheck syntax zsh-syntax trap-guard apt-first ## The gate: shellcheck + bash -n + zsh -n + trap discipline + apt ordering
 	@printf '\033[32m✓\033[0m lint clean\n'
 
 shellcheck: ## ShellCheck the repo-owned bash (excludes the vendored core/)
@@ -73,6 +73,35 @@ trap-guard: ## Refuse a RETURN trap that does not disarm itself (shellcheck cann
 	  exit 1; \
 	fi
 	@printf '\033[32m✓\033[0m RETURN traps disarm themselves\n'
+
+apt-first: ## Refuse an out-of-band install that could run BEFORE the apt base list
+	@# THE INVARIANT: provision() installs install/packages.txt first, and every
+	@# out-of-band install (verified_install / verified_tree_install / go install /
+	@# vendor apt repo) after it. Each of those is guarded by `command -v <binary>`,
+	@# so on a distro where apt already supplied the tool the guard fires and the
+	@# download is skipped. That guard is the ENTIRE mechanism behind the `# only:kali`
+	@# tier in install/packages.txt — Kali's archive tracks sid and has neovim,
+	@# starship, lazygit and friends, so apt lands them and the pinned fetch no-ops.
+	@#
+	@# Reorder those two blocks and nothing errors: the guards simply all miss, every
+	@# tool is fetched out-of-band as well as from apt, and Kali quietly ends up with
+	@# a pinned tarball shadowing its distro build. No lint sees that, and no CI job
+	@# here does either — they run --links-only and never enter provision(). Hence a
+	@# line-number check, in the same spirit as trap-guard above.
+	@base=$$(grep -n 'apt_install "$${base\[@\]}"' bootstrap.sh | head -1 | cut -d: -f1); \
+	if [ -z "$$base" ]; then \
+	  echo "apt-first: could not find the base apt_install line in bootstrap.sh"; exit 1; \
+	fi; \
+	bad=$$(grep -nE '^[[:space:]]*(verified_install|verified_tree_install|_dotfiles_go_install|_add_vendor_repo) ' bootstrap.sh \
+	      | awk -F: -v b="$$base" '$$1 < b { print }'); \
+	if [ -n "$$bad" ]; then \
+	  echo "$$bad"; \
+	  echo "^ these run BEFORE apt_install of the base list (line $$base)."; \
+	  echo "  Their 'command -v' guards would then always miss, so the '# only:kali'"; \
+	  echo "  tier in install/packages.txt would double-install instead of skipping."; \
+	  exit 1; \
+	fi; \
+	printf '\033[32m✓\033[0m out-of-band installs all follow the apt base list (line %s)\n' "$$base"
 
 markdown: ## markdownlint the repo-owned docs (shares .markdownlint.jsonc with Core)
 	@command -v markdownlint-cli2 >/dev/null 2>&1 \

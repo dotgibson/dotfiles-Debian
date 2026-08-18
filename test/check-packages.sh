@@ -87,7 +87,15 @@ suite="$(apt-cache policy 2>/dev/null |
   sed -n 's/.*[[:space:],]a=\([^,]*\).*/\1/p' | grep -v '^now$' | head -1)"
 say "apt suite in view: ${suite:-unknown}"
 
-mapfile -t pkgs < <(blib_read_pkgs "$manifest")
+# The distro tier, applied BEFORE Core's parser — otherwise this would resolve names the
+# target it runs on would never be asked to install (a kali-only package checked on noble
+# is a guaranteed, meaningless red). OS_ID comes from the box the check runs on, which in
+# CI is the matrix container.
+# shellcheck source=scripts/pkg-filter.sh
+source "$(dirname "$0")/../scripts/pkg-filter.sh"
+CHECK_OS_ID="$(sed -n 's/^ID=//p' /etc/os-release 2>/dev/null | head -1 | tr -d "\"'\''")"
+say "distro tier: ${CHECK_OS_ID:-unknown}"
+mapfile -t pkgs < <(blib_read_pkgs <(pkg_filter_lines "$manifest" "$CHECK_OS_ID"))
 ((${#pkgs[@]})) || { bad "$manifest parsed to zero package names"; exit 1; }
 say "$manifest — ${#pkgs[@]} names"
 
@@ -125,7 +133,15 @@ fi
 # ── 2. version floors ─────────────────────────────────────────────────────────
 # Floors live in the manifest's trailing comments (`name  # min:X.Y.Z`) so the file
 # stays human-first and there is no second list to drift. Read them straight from the
-# source rather than through blib_read_pkgs, which strips comments by design.
+# source rather than through blib_read_pkgs, which strips comments by design — but
+# through pkg_filter_lines, which does not.
+#
+# The tier matters MORE here than in the resolve pass above, because the failure is
+# louder: a kali-only floor evaluated on noble does not merely fail to resolve, it
+# resolves to the WRONG PACKAGE and reports a real-looking breach. `neovim min:0.12.0`
+# on noble finds 0.9.5 and calls it BELOW the floor — which is true, and is precisely
+# why noble installs the pinned tarball instead. Unfiltered, that reds the lane it is
+# supposed to certify.
 below=()
 while IFS= read -r line; do
   [[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -145,7 +161,7 @@ while IFS= read -r line; do
   else
     below+=("$name — candidate $cand is BELOW the required min:$floor")
   fi
-done <"$manifest"
+done < <(pkg_filter_lines "$manifest" "$CHECK_OS_ID")
 
 echo
 rc=0

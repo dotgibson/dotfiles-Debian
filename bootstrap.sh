@@ -105,6 +105,10 @@ unset _req
 source "$DOTFILES/core/lib/ux.sh"
 # shellcheck source=core/lib/bootstrap-lib.sh
 source "$DOTFILES/core/lib/bootstrap-lib.sh"
+# The distro tier for install/packages.txt (ubuntu / debian / kali). Sits in FRONT of
+# Core's blib_read_pkgs rather than replacing it — see scripts/pkg-filter.sh's header.
+# shellcheck source=scripts/pkg-filter.sh
+source "$DOTFILES/scripts/pkg-filter.sh"
 
 # Apply any --only/--skip module selection now the validator (blib_select) exists;
 # it aborts on a malformed selector or an unknown group.
@@ -128,23 +132,32 @@ note_fail() {
 # `grep -qi debian /etc/os-release` matches any incidental substring (a HOME_URL, a
 # PRETTY_NAME) and would sail a wholly unrelated distro past the guard.
 #
-# ubuntu and debian are BOTH first-class here — the repo is named for the family, and CI
-# proves ubuntu:24.04 (the target) plus debian:trixie (so an Ubuntu-only assumption or a
-# PPA reds a PR). Derivatives (Mint, Pop!_OS, Raspbian, Kali) report ID_LIKE=debian and are
-# a legitimate but DELIBERATE target: they need --force-os, because their package sets and
-# release cadence differ from the two we actually test.
+# ubuntu, debian and kali are ALL first-class here — the repo is named for the family, and
+# CI proves ubuntu:24.04 (the LTS target), debian:trixie (so an Ubuntu-only assumption or a
+# PPA reds a PR), and kalilinux/kali-rolling. Kali joined when dotfiles-Offense shed its
+# OS-native half to become a pure Role layer: the offensive repo now stacks ON this one
+# rather than carrying a duplicate apt layer of its own.
+#
+# Kali is the reason install/packages.txt is distro-tiered. It is a rolling sid derivative
+# while noble froze in April 2024, so a package this repo must fetch out-of-band on Ubuntu
+# is frequently just in apt on Kali — see the `# only:` / `# skip:` annotations there and
+# the apt-first checks around verified_install below.
+#
+# OTHER derivatives (Mint, Pop!_OS, Raspbian) still report ID_LIKE=debian and still need
+# --force-os: they are legitimate but DELIBERATELY untested, because their package sets and
+# release cadence differ from the three we actually prove in CI.
 _osr_field() { # <KEY> — the unquoted value of KEY in /etc/os-release ("" when absent)
   [[ -r /etc/os-release ]] || return 0
   sed -n "s/^$1=//p" /etc/os-release | head -1 | tr -d '"'"'"
 }
 OS_ID="$(_osr_field ID)"
 OS_ID_LIKE="$(_osr_field ID_LIKE)"
-if [[ "$OS_ID" != ubuntu && "$OS_ID" != debian ]]; then
+if [[ "$OS_ID" != ubuntu && "$OS_ID" != debian && "$OS_ID" != kali ]]; then
   if [[ " $OS_ID_LIKE " == *" debian "* ]]; then
     if ((FORCE_OS)); then
       blib_warn "ID=$OS_ID is only debian-LIKE — continuing under --force-os; package names may differ"
     else
-      echo "This bootstrap targets Ubuntu (ID=ubuntu) or Debian (ID=debian); this box reports ID=$OS_ID (ID_LIKE=$OS_ID_LIKE)." >&2
+      echo "This bootstrap targets Ubuntu (ID=ubuntu), Debian (ID=debian) or Kali (ID=kali); this box reports ID=$OS_ID (ID_LIKE=$OS_ID_LIKE)." >&2
       echo "Package availability differs there. Re-run with --force-os to proceed anyway." >&2
       exit 1
     fi
@@ -521,7 +534,10 @@ provision() {
     exit 1
   }
   local -a base=()
-  mapfile -t base < <(blib_read_pkgs "$base_list")
+  # pkg_filter_lines drops the lines annotated for OTHER distros; blib_read_pkgs then
+  # turns what survives into names, exactly as it always did. Process substitution because
+  # blib_read_pkgs takes a path.
+  mapfile -t base < <(blib_read_pkgs <(pkg_filter_lines "$base_list" "$OS_ID"))
 
   sudo_keepalive_start
 
@@ -531,7 +547,9 @@ provision() {
   # images — but it is done unconditionally on Ubuntu so CI proves THIS SCRIPT'S
   # assumption rather than the container image's defaults. `add-apt-repository` lives in
   # software-properties-common, which is why that one package is installed ahead of the
-  # manifest. Guarded on ID=ubuntu: Debian has no `universe` component and the call errors.
+  # manifest. Guarded on ID=ubuntu because it is the ONLY target with that component:
+# Debian has no `universe`, and Kali ships `kali-rolling main contrib non-free
+# non-free-firmware` — on either, the call errors.
   if [[ "$OS_ID" == ubuntu ]]; then
     blib_say "apt update (pre-universe)"
     apt_get update -qq || note_fail "apt-get update failed"
@@ -554,6 +572,16 @@ provision() {
     apt_get update || note_fail "apt-get update failed"
   fi
 
+  # ORDER IS LOAD-BEARING: this must stay AHEAD of every out-of-band install below.
+  # Each of those is guarded by `command -v <binary>`, so on a distro where apt already
+  # supplied the tool the guard fires and the download no-ops. That is the whole
+  # mechanism behind install/packages.txt's `# only:kali` tier — Kali's archive tracks
+  # sid and simply has neovim/starship/lazygit/…, so apt lands them here and the pinned
+  # fetches skip themselves. No conditional is needed, and adding one would duplicate a
+  # guard that already exists and can drift from it.
+  #
+  # Reorder these two blocks and nothing errors — the guards just all miss, and Kali ends
+  # up with a pinned tarball shadowing its distro build. `make apt-first` pins the order.
   blib_say "apt base CLI stack (install/packages.txt)"
   apt_install "${base[@]}"
   blib_ok "base packages requested: ${#base[@]}"
@@ -784,7 +812,7 @@ elif ((BLIB_DRY)); then
   blib_say "would apt update$( ((DO_UPGRADE)) && printf ' + full-upgrade')"
   if [[ -f "$DOTFILES/install/packages.txt" ]]; then
     _dry_pkgs=()
-    mapfile -t _dry_pkgs < <(blib_read_pkgs "$DOTFILES/install/packages.txt")
+    mapfile -t _dry_pkgs < <(blib_read_pkgs <(pkg_filter_lines "$DOTFILES/install/packages.txt" "$OS_ID"))
     blib_say "would apt install ${#_dry_pkgs[@]} packages: ${_dry_pkgs[*]}"
     unset _dry_pkgs
   else

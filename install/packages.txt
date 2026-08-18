@@ -19,6 +19,17 @@
 # compares the apt candidate against them with `dpkg --compare-versions`. Name
 # resolution alone is not enough on a frozen archive — neovim 0.9.5 and
 # tree-sitter-cli 0.20.8 both resolve fine and both break the box.
+#
+# `# only:<ids>` / `# skip:<ids>` are the DISTRO TIER, read by scripts/pkg-filter.sh
+# and applied before blib_read_pkgs. IDs are /etc/os-release ID values, comma-separated,
+# no spaces: ubuntu, debian, kali. An unannotated line applies everywhere, so the
+# untiered majority of this file reads exactly as it always did.
+#
+# The tier exists because the three targets do not share an archive age. Ubuntu 24.04
+# froze in April 2024; Kali is a rolling sid derivative. A dozen tools this repo must
+# fetch out-of-band on noble are simply in apt on Kali, and installing them twice — once
+# as a pinned tarball, once from apt — would be worse than either alone. bootstrap.sh's
+# verified_install and vendor-repo steps carry the mirror image of these annotations.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── shell + multiplexer ───────────────────────────────────────
@@ -104,9 +115,56 @@ unattended-upgrades    # security-pocket auto-updates; these boxes are unattende
 # so listing it would fail this manifest on the Debian CI lane — for a package that is
 # only ever used inside bootstrap.sh's `ID=ubuntu` branch. bootstrap.sh installs it
 # on demand there instead. This manifest stays true for the whole family.
+
+# ── rolling-only: in apt on Kali, out-of-band everywhere else ─
+# Every name below is absent from noble (or present too old to satisfy Core), so on
+# ubuntu/debian bootstrap.sh installs it as a pinned SHA-256'd release asset, a
+# `go install`, or from a vendor apt repo. Kali's archive tracks sid and simply has
+# them, so there the distro build wins: fewer moving parts, and apt owns the upgrade.
+#
+# Provenance: this set is exactly dotfiles-Offense's former base list minus what this
+# repo already had — proven resolvable by that repo's own kali-rolling packages lane
+# before the OS-native layer moved here.
+#
+# The `# min:` floors ARE repeated here, and that is the whole reason this tier is safe.
+# A floor is a statement about what CORE needs, not about how old an archive is: nvim
+# below 0.12 breaks Core's pinned nvim-treesitter whether it came from a frozen suite or
+# a rolling one. Tiering a package in without its floor would silently swap a pinned,
+# known-good 0.12.4 for whatever apt happens to have — a DOWNGRADE dressed as a
+# simplification. test/check-packages.sh applies the same tier as bootstrap.sh, so the
+# kali lane checks these floors on kali and nowhere else.
+neovim                 # only:kali  min:0.12.0  — Core's nvim-treesitter hard-requires
+                       #             0.12; pinned NVIM_VERSION on ubuntu/debian
+tree-sitter-cli        # only:kali  min:0.26.1  — nvim-treesitter's floor (core's
+                       #             PORTING-MATRIX footnote 5); no Debian/Ubuntu suite
+                       #             short of sid clears it, which is why Kali can
+starship               # only:kali   pinned STARSHIP_VERSION elsewhere
+lazygit                # only:kali   pinned LAZYGIT_VERSION elsewhere
+procs                  # only:kali   pinned PROCS_VERSION elsewhere
+xh                     # only:kali   pinned XH_VERSION elsewhere
+du-dust                # only:kali   binary stays `dust`; pinned DUST_VERSION elsewhere
+difftastic             # only:kali   binary: difft; pinned DIFFT_VERSION elsewhere
+yq-go                  # only:kali   mikefarah's Go yq. NOT plain `yq`, which is
+                       #             kislyuk's Python one — installing that is worse
+                       #             than installing none. `go install`ed elsewhere.
+glow                   # only:kali   Charm's signed vendor repo elsewhere
+gum                    # only:kali   Charm's signed vendor repo elsewhere
+cargo                  # only:kali   noble's rustc 1.75 is too old to build yazi /
+                       #             ast-grep / viddy, so this repo skips all three
+                       #             there and Core HAVE_*-gates them. Kali's rustc
+                       #             builds them, so the toolchain is worth having.
+python3-pynvim         # only:kali   nvim's python provider
+wl-clipboard           # only:kali   see "Deliberately NOT here" below — the headless
+xclip                  # only:kali   rule is an ubuntu/debian fact, not a family one.
+                       #             Kali runs under WSL2 with WSLg (and on bare metal),
+                       #             where a clipboard backend has something to talk to.
 #
 # Deliberately NOT here:
-#   wl-clipboard / xclip — headless, ssh-only: there is no display for them to talk to.
+#   wl-clipboard / xclip — on ubuntu/debian only: headless, ssh-only, no display for
+#     them to talk to. Tiered in for Kali above.
 #     See README's "Headless clipboard" note for what that costs and how OSC 52 fixes it.
+#   git-credential-manager — it was on dotfiles-Offense's list, but flagged there as
+#     "optional; remove if not packaged on your box". A name whose own comment doubts
+#     it resolves does not belong in a manifest a CI lane asserts against.
 #   flatpak / snapd      — no GUI apps on these boxes. snapd is left exactly as Ubuntu
 #     shipped it: removing it is a system-policy call, not a dotfiles one.
