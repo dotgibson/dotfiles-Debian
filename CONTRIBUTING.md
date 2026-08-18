@@ -40,7 +40,9 @@ belongs in `core/lib/bootstrap-lib.sh` upstream instead.
 
 One judgement call is specific to this repo: **does a tool belong in
 `install/packages.txt` or in `bootstrap.sh`?** It belongs in the manifest only if apt
-resolves it *at a version Core can use*. Ubuntu 24.04 is frozen, so "apt has it" is not
+resolves it *at a version Core can use*, **on the distro you annotate it for**. A name
+with no `# only:` / `# skip:` marker is claimed for all three targets, so it must resolve
+on noble, trixie AND kali-rolling. Ubuntu 24.04 is frozen, so "apt has it" is not
 the same question as "apt has a usable one" — `neovim` and `tree-sitter-cli` both
 resolve and both break the stack. Declare a floor (`# min:X.Y.Z`) when it matters, and
 move anything below it into `bootstrap.sh` as a pinned `verified_install`.

@@ -25,7 +25,7 @@
   <h3 align="center">🎩 dotfiles-Debian</h3>
 
   <p align="center">
-    The Debian-family OS-native layer — targeting Ubuntu 24.04 LTS.
+    The Debian-family OS-native layer — Ubuntu 24.04 LTS, Debian trixie, Kali rolling.
     <br />
     <a href="https://dotgibson.github.io/dotfiles-web/docs"><strong>Explore the docs »</strong></a>
     <br />
@@ -68,8 +68,18 @@ starship, mise) is authored once in
 is genuinely Debian-family: the `apt` package list, the out-of-band installs that
 a frozen archive forces, paths, and AppArmor helpers.
 
-**Target: Ubuntu 24.04 LTS (noble).** CI proves `ubuntu:24.04` and, because the
-repo is named for the family rather than one distro, `debian:trixie` as well.
+**Targets: Ubuntu 24.04 LTS (noble), Debian trixie, and Kali rolling.** All three
+are gated in CI. noble is the primary — the headless SSH-only boxes this repo was
+written for — trixie proves the repo's name is not a lie, and Kali arrived when
+`dotfiles-Offense` shed its OS-native half to become a pure Role layer stacking on
+this one.
+
+Kali is the interesting one: it tracks **sid**, so where noble is frozen and forces
+a dozen tools out of apt, Kali simply has them. `install/packages.txt` therefore
+carries a **distro tier** — `# only:<ids>` / `# skip:<ids>` annotations read by
+`scripts/pkg-filter.sh` — so one manifest serves all three without a second file to
+drift. Unannotated lines, which are most of them, apply everywhere.
+
 Derivatives (Mint, Pop!_OS, Raspbian) report `ID_LIKE=debian` and need
 `--force-os` — they will probably work, they are just not gated.
 
