@@ -171,7 +171,8 @@ fi
 # Resolve the escalator ONCE, the way the shared lib expects (it reads $BLIB_SU, defaulting
 # to `sudo` only when the var is UNSET — so an explicit empty value means "run directly").
 #
-# Deliberately NOT a hardcoded `sudo` (which is what dotfiles-Kali does): there is no sudo
+# Deliberately NOT a hardcoded `sudo` (which is what dotfiles-Offense did before it shed
+# its OS-native half to this repo): there is no sudo
 # to call inside an `ubuntu:24.04` container, which is exactly where the reusable CI
 # bootstrap test runs. Resolving here keeps our escalations in step with the lib's own
 # (blib_set_login_shell).
@@ -401,7 +402,8 @@ _vi_fetch() {
 
 # verified_install <binary> <asset-url> <sha256> [inner-name]
 # For assets that contain ONE binary. Handles the three shapes upstreams actually ship:
-# .tar.gz, plain .gz, and .zip — dotfiles-Kali's version assumed tar.gz only, so a plain
+# .tar.gz, plain .gz, and .zip — the dotfiles-Offense version this was derived from
+# assumed tar.gz only, so a plain
 # .gz (tree-sitter) or a .zip (procs) failed to unpack and the tool was SILENTLY skipped.
 #
 # [inner-name] is the name of the executable INSIDE the asset when it differs from the

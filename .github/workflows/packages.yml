@@ -52,7 +52,7 @@ on:
       - 'scripts/pkg-filter.sh'
       - '.github/workflows/packages.yml'
   schedule:
-    # Tue 07:00 UTC — an unused fleet slot (Fedora packages is Sat 07:00, Kali's is
+    # Tue 07:00 UTC — an unused fleet slot (Fedora packages is Sat 07:00, Offense's is
     # Wed 07:00), so the fleet never draws on the same runner window.
     - cron: "0 7 * * 2"
   workflow_dispatch:
