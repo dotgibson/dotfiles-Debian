@@ -24,11 +24,17 @@ jobs:
   # required check whose name no longer reports blocks every PR forever — the exact
   # deadlock the path-filter note above warns about, arrived at from a different
   # direction. A second job adds new check names and leaves the required ones alone.
+  # ⚠ TEMPORARY — DO NOT MERGE AS-IS. Pinned at a dotfiles-core BRANCH commit, not @v4,
+  # to exercise the provision-stub job before that job exists in any release
+  # (dotgibson/dotfiles-core#577, tracking dotgibson/dotfiles-core#575). Revert both jobs to
+  # @v4 before merge; `provision_stub` cannot be passed to @v4 at all — GitHub rejects an
+  # unknown input to a reusable workflow.
   test:
-    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v4
+    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@c5274973530112bf154bc3798d7bcf38b942f188
     with:
       image: ubuntu:24.04
       prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh"
+      provision_stub: true
 
   # Kali is a first-class target since dotfiles-Offense shed its OS-native half, and
   # it is the one target whose archive is ROLLING — so it exercises a genuinely
@@ -40,7 +46,8 @@ jobs:
   # unrelated PRs. Treat a red here as a to-do, the same way packages.yml's advisory
   # lanes are read.
   test-kali:
-    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v4
+    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@c5274973530112bf154bc3798d7bcf38b942f188
     with:
       image: kalilinux/kali-rolling
       prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh"
+      provision_stub: true
