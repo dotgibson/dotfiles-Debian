@@ -181,27 +181,35 @@ prompt — comes from vendored Core; this repo owns the Debian-family specifics:
 - `core/` — vendored from `dotfiles-core` (read-only here; edit upstream)
 
 The things that actually bite here — a frozen archive, `needrestart` hanging an
-unattended `apt`, and the headless clipboard gap below — are written up on
-the hub, alongside the per-distro **[porting matrix][porting]**:
+unattended `apt`, and the headless clipboard's copy/paste asymmetry below — are
+written up on the hub, alongside the per-distro **[porting matrix][porting]**:
 
 > **[→ dotfiles-Debian on the documentation hub][repo-docs]**
 
-### Headless clipboard — a known gap
+### Headless clipboard — copy works, paste does not
 
 These boxes are SSH-only, so `wl-clipboard`/`xclip` are deliberately not installed:
 there is no display for them to talk to. Core's `clip` detects WSL → macOS → Wayland
-→ X11 and, finding none of them, exits 1. That leaves `pbcopy`/`pbpaste` and tmux
-`copy-pipe` non-functional.
+→ X11 and, finding none of them, falls back to **OSC 52** — base64-encoding the copy
+into an escape sequence written to the controlling terminal, which lands it on the
+clipboard of whatever you are sitting in front of. `pbcopy`, tmux `copy-pipe` and
+nvim's `"+y` all work over plain ssh because of it.
 
-Neovim looks like it should be fine — `core/nvim/lua/gerrrt/config/clipboard.lua`
-carries an OSC 52 fallback for precisely this case — but it is not: that fallback is
-the `elseif` branch, taken only when `clip` is *absent*. Bootstrap puts `clip` on
-PATH, so the first branch wins and `"+y` routes through a script that always fails.
+Paste does not, and the asymmetry is deliberate: `core/bin/clip-paste` has no OSC 52
+counterpart, because reading over OSC 52 means querying the terminal for a reply most
+terminals refuse to send and some never answer at all. It fails with a message saying
+so rather than hanging, and `pbpaste` and `"+p` go with it — use the terminal's own
+paste instead.
 
-The fix belongs in `core/bin/clip` (an OSC 52 fallback would restore zsh, tmux and
-nvim together) and is tracked upstream in `dotfiles-core`, since that file is
-vendored fleet-wide. If you need the clipboard on a particular box before then,
-`sudo apt install xclip` and use `ssh -X`.
+Neovim reaches that fallback through `clip`, not through the one in
+`core/nvim/lua/gerrrt/config/clipboard.lua`: that one is the `elseif` branch, taken
+only when `clip` is *absent*, and bootstrap puts `clip` on PATH. So the first branch
+wins — which is right, because it is the branch that carries the fallback.
+
+Two cases still fail, both loudly. Many terminals silently drop an OSC 52 payload over
+roughly 100 KB of base64, so `clip` warns when one gets that large rather than letting
+you believe it landed. And with no controlling terminal at all — cron, a daemon,
+anything `setsid`'d — there is nothing to write the sequence to, and it exits 1.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
