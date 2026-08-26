@@ -119,8 +119,16 @@ No new languages — this layer is shell and package config over
 
 ### Prerequisites
 
-An Ubuntu 24.04 LTS box (Desktop or Server) or Debian trixie, and **Git**. Everything else —
-zsh, tmux, nvim, starship, and the modern-CLI stack — is provisioned by
+An Ubuntu 24.04 LTS box (Desktop or Server) or Debian trixie, plus **`curl`** — `bootstrap.sh`
+fetches the pinned upstream assets apt cannot supply, so it checks for curl up front and
+stops with the full list if anything it needs is missing. Most desktop and server installs
+already have it; a minimal or container image may not (`sudo apt-get install -y curl`).
+
+**Git** is only needed for the one-time `tpm` clone, and its absence is a warning rather than
+a stop — a run without git wires everything else and tells you how to finish. You will want it
+anyway to clone this repo.
+
+Everything else — zsh, tmux, nvim, starship, and the modern-CLI stack — is provisioned by
 `bootstrap.sh`.
 
 ### Installation

@@ -28,7 +28,15 @@ jobs:
     uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v5
     with:
       image: ubuntu:24.04
-      prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh"
+      # curl is a HARD preflight requirement of bootstrap.sh (`need=(apt-get dpkg curl
+      # sed awk tar)`), and neither ubuntu:24.04 nor kalilinux/kali-rolling ships it in
+      # the base image. The stubbed legs below never noticed: bootstrap-test.yml puts a
+      # curl SHIM on PATH for provision_stub, and --links-only skips the preflight
+      # entirely — so both were green while an unstubbed run died in preflight before
+      # provisioning started (dotgibson/dotfiles-core#742). Installing the real curl
+      # here costs the stubbed legs nothing: the shim dir is PREPENDED to PATH, so the
+      # stub still wins where it is meant to.
+      prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh curl"
       # Run provision() for real, with the package managers and downloaders stubbed
       # (dotgibson/dotfiles-core#575). links-only returns BEFORE provision() is entered, so
       # until this the whole first half of this bootstrap — apt, the 32-package base stack,
@@ -50,7 +58,15 @@ jobs:
     uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v5
     with:
       image: kalilinux/kali-rolling
-      prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh"
+      # curl is a HARD preflight requirement of bootstrap.sh (`need=(apt-get dpkg curl
+      # sed awk tar)`), and neither ubuntu:24.04 nor kalilinux/kali-rolling ships it in
+      # the base image. The stubbed legs below never noticed: bootstrap-test.yml puts a
+      # curl SHIM on PATH for provision_stub, and --links-only skips the preflight
+      # entirely — so both were green while an unstubbed run died in preflight before
+      # provisioning started (dotgibson/dotfiles-core#742). Installing the real curl
+      # here costs the stubbed legs nothing: the shim dir is PREPENDED to PATH, so the
+      # stub still wins where it is meant to.
+      prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh curl"
       # Kali too: it exercises the `# only:kali` tier of install/packages.txt, which is a
       # genuinely different path through provision(). Same advisory posture as this job's
       # other legs — a rolling archive can break through no fault of this repo.
