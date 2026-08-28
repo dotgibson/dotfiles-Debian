@@ -13,6 +13,24 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Added
 
+- **`os/debian.capabilities` and `os/debian.kali.capabilities`** — this repo's Core v5
+  capability declarations (dotgibson/dotfiles-core#663, #667). Core's `up`, maint runner
+  and `core-doctor` now dispatch through them. The apt verbs are identical on all three
+  targets, so almost everything is shared; **exactly one key differs**, and it is why
+  there are two files: Kali does not declare `MAINT_UNATTENDED_UPGRADE`, because
+  engagement boxes are updated by hand between ops and a background full-upgrade
+  mid-engagement destroys the reproducibility findings rest on. `bootstrap.sh` relinks the
+  Kali file over the default, keyed on the **same `$OS_ID`** that `scripts/pkg-filter.sh`
+  tiers `install/packages.txt` on — so the declaration and the package list agree by
+  construction rather than by coincidence, and a future tier is one new file with no code
+  change.
+- `TOOLS_OPTIN` declares `jj` and `ast-grep` opt-in on this family — they are `—` on noble
+  and trixie and cargo-only on Kali. Core's single list could not say "opt-in there,
+  expected here", so `core-doctor` reported them as missing-and-expected on every box
+  (dotgibson/dotfiles-core#666). `dust` is deliberately **not** in that list: it is
+  present here, just installed out of band under its plain name.
+- **`make capabilities`** — validates `os/*.capabilities` against Core's schema via the
+  vendored `core/scripts/check-capabilities.sh`, and runs as part of `make lint`.
 - Initial `dotfiles-Debian` OS-native layer: the Debian-family repo the fleet had
   planned, cancelled, and left a note against in `dotfiles-core/scripts/os-repos.txt`.
   Targets **Ubuntu 24.04 LTS** on headless SSH-only machines; `debian:trixie` is a
