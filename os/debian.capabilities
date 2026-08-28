@@ -1,0 +1,87 @@
+# os/debian.capabilities — the Debian-family capability declaration, NOBLE + TRIXIE
+# tier (Core v5, #663/#667).
+# ──────────────────────────────────────────────────────────────────────────────
+# Read (never sourced) by Core's zsh/02-capabilities.zsh into $_CORE_CAP, and by
+# maint/dotfiles-maint.sh, which is bash. bootstrap.sh links it to
+# $ZDOTDIR/os.capabilities via blib_link_os_layer.
+#
+# Transcribed from core/PORTING-MATRIX.md §"Package-manager commands", the
+# Debian/Ubuntu and Kali columns — which are identical for every apt verb.
+# Validate with:  core/scripts/check-capabilities.sh os/debian.capabilities
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# THREE TARGETS, ONE MANIFEST — AND THE TIER SURVIVES INTO THIS FILE.
+# ══════════════════════════════════════════════════════════════════════════════
+# This repo targets Ubuntu noble, Debian trixie and Kali rolling, already tiered in
+# install/packages.txt by scripts/pkg-filter.sh's `only:` / `skip:` grammar. The apt
+# VERBS are the same on all three, so almost all of this file is shared — but ONE key
+# cannot be: Kali must not upgrade unattended (engagement boxes are updated by hand
+# between ops, so a background upgrade breaks reproducibility mid-engagement).
+#
+# So Kali gets os/debian.kali.capabilities and bootstrap.sh relinks it, keyed on the
+# SAME /etc/os-release ID ($OS_ID) that pkg-filter.sh tiers the package list on — so
+# the declaration and the package list agree by construction rather than by coincidence.
+# THIS file is noble and trixie. Keep the two in step by hand; only one key differs.
+#
+# A `#` INSIDE A VALUE IS NOT A COMMENT — the reader keeps it. Notes go above.
+
+# ── package-manager verbs (all required) ──────────────────────────────────────
+PKG_REFRESH=sudo apt-get update
+# apt-get, not apt, everywhere in this file: `apt` prints a stability warning when its
+# output is not a terminal and its interface is explicitly not stable for scripts.
+# `full-upgrade`, not `upgrade`: this stack needs the removals `upgrade` refuses.
+PKG_UPGRADE=sudo apt-get full-upgrade
+PKG_INSTALL=sudo apt-get install -y
+PKG_REMOVE=sudo apt-get remove -y
+PKG_SEARCH=apt-cache search
+PKG_OWNS=dpkg -S
+# SIMULATED against the lists already on disk: no root, no network, no mutation —
+# which is what makes it safe to run from a once-a-day background nudge.
+PKG_COUNT_PENDING=apt-get -s upgrade
+
+# ── scheduler (required) ──────────────────────────────────────────────────────
+SCHEDULER=systemd
+SCHEDULER_UNIT_DIR=~/.config/systemd/user
+
+# ── how `up` applies ──────────────────────────────────────────────────────────
+# apt resolves against the lists in /var/lib/apt/lists, so refreshing is a real
+# precondition and a failure ABORTS: an upgrade computed against an index that could
+# not be refreshed is how a box half-applies.
+PKG_UPGRADE_PRE=sudo apt-get update
+PKG_UPGRADE_PARTIAL=sudo apt-get install --only-upgrade
+PKG_CLEANUP=sudo apt-get autoremove
+PKG_ASSUME_YES=-y
+
+# ── how `up` counts ───────────────────────────────────────────────────────────
+# `apt-get -s upgrade` prints `Inst <name> [<old>] (<new> ...)` for each pending
+# package, among a lot of other simulation output. AN ERE CANNOT END IN A LITERAL
+# SPACE — the reader trims trailing whitespace — so this is [[:space:]], never `^Inst `.
+PKG_PENDING_MATCH=^Inst[[:space:]]
+PKG_PENDING_FIELD=2
+
+# ── the scheduled runner ──────────────────────────────────────────────────────
+# Noble and trixie are versioned, non-rolling releases whose security and maintenance
+# updates are exactly what an unattended nightly is for — and on the headless SSH-only
+# boxes this repo primarily targets, that nightly is often the only thing that applies
+# them. It is also what these boxes do today: Core's untethered maint arm ran
+# `apt-get update && full-upgrade -y && autoremove -y` here.
+#
+# KALI DOES NOT DECLARE THIS — see os/debian.kali.capabilities. The operator's
+# MAINT_SYSTEM_UPGRADE=1 is still the FIRST of the two gates; this is only the second.
+MAINT_UNATTENDED_UPGRADE=1
+
+# ── optional tools ────────────────────────────────────────────────────────────
+# A DECLARED LIST REPLACES Core's _CORE_DOCTOR_OPTIN — it does not add to it — so this
+# re-states Core's nine and appends the two this family differs on.
+#
+# jj and ast-grep are `—²⁹` in PORTING-MATRIX.md's Debian/Ubuntu cells: not packaged on
+# noble or trixie at all, and cargo-only (²¹) on Kali. Core's single list could not say
+# "opt-in there, expected here", so both reported as expected-and-missing on every box —
+# a degraded integration where nothing is actually wrong, which is the failure mode most
+# likely to train an operator to ignore the report (#666).
+#
+# NOT dust, deliberately, however much it looks like the same case: noble has no
+# `du-dust` package, so dust arrives OUT OF BAND under its plain name and is PRESENT.
+# What differs there is the resolved binary name core-doctor displays, not whether the
+# tool is expected — muting it here would hide a real absence.
+TOOLS_OPTIN=lnav hyperfine watchexec shellcheck shfmt ouch git-absorb jnv gping jj ast-grep

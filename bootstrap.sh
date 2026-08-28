@@ -833,6 +833,23 @@ wire_links() {
   # loader + the default-login-shell switch all live in core/lib/bootstrap-lib.sh.
   blib_link_core "$DOTFILES" "$CONFIG"
   blib_link_os_layer "$DOTFILES" "$CONFIG" debian
+  # ── the capability declaration's TIER ────────────────────────────────────────
+  # blib_link_os_layer has just linked os/debian.capabilities, which is noble's and
+  # trixie's. This repo targets three distros, and one key cannot be shared: Kali must
+  # not upgrade unattended (engagement boxes are updated by hand between ops).
+  #
+  # A declaration is DATA and cannot probe, so the tier is chosen HERE — keyed on the
+  # SAME $OS_ID that scripts/pkg-filter.sh tiers install/packages.txt on, so the
+  # declaration and the package list can never disagree about which distro this is.
+  #
+  # Relink rather than branch the call above: blib_link_os_layer owns the default name,
+  # and overriding one destination afterwards keeps this repo out of Core's contract.
+  # blib_link honours BLIB_DRY, so --dry-run reports "would relink" and changes nothing.
+  # The [[ -f ]] guard means adding a future tier is one file, with no edit here.
+  if [[ -f "$DOTFILES/os/debian.$OS_ID.capabilities" ]]; then
+    blib_say "$OS_ID tier — using os/debian.$OS_ID.capabilities for the capability declaration"
+    blib_link "$DOTFILES/os/debian.$OS_ID.capabilities" "$CONFIG/zsh/os.capabilities"
+  fi
   # shellcheck disable=SC2119  # no args is intentional — writes the default module set
   blib_write_zshrc_loader
   blib_set_login_shell
