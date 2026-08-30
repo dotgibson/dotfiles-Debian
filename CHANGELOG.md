@@ -72,3 +72,19 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 - `make zsh-syntax` printed "zsh not installed — skipping" and then ran `zsh -n`
   anyway. Each `make` recipe line runs in its own shell, so the guard's `exit 0` only
   ended that line. The same shape is still present in the other OS repos' Makefiles.
+- **`make markdown` had the same defect, and it was still live here.** Without a global
+  `markdownlint-cli2` it printed "not installed — skipping" and then ran the linter
+  anyway, failing with `Error 127`. Collapsed into one recipe line, so the skip is a real
+  skip. Of the fleet, `dotfiles-Fedora` carries this target byte-for-byte (also live);
+  `dotfiles-Offense` and `dotfiles-Defense` have the same shape guarding `npx` instead
+  (latent — it only bites where `npx` is absent); `dotfiles-MacBook` already fixed its
+  copy; Alpine, Arch, Gentoo and openSUSE have no markdown target at all.
+- **`make markdown` also scanned the wrong files.** It globbed `'*.md'`, which is
+  top-level only, while the reusable gate's markdown leg — **blocking** since
+  dotgibson/dotfiles-core#592 — lints `git ls-files '*.md' ':!:core/**'`, recursively. The three
+  `.github/` markdown files were therefore enforced by a required check and invisible
+  locally, so this target could read green against a red PR. It now uses the same
+  pathspec via a new `MD_FILES`. All nine files lint clean, so nothing was hiding.
+- `.markdownlint.jsonc`'s header claimed the rules were "mirrored from Core rather than
+  CI-enforced" and that "lint.yml skips `**.md` entirely". Both were true when written and
+  neither survived dotgibson/dotfiles-core#592.
