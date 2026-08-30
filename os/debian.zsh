@@ -167,11 +167,18 @@ fi
 unset _IS_WSL
 
 # ── auto-start/attach tmux for interactive terminals ─────────────────────────
-# This is the highest-value line in the file on an SSH-only box: every reconnect lands
-# back in the same session instead of a fresh shell, so a dropped link costs nothing.
-# Skip inside an existing tmux, VS Code's integrated terminal, non-TTYs, and when
+# Land straight in a persistent `main` session for LOCAL interactive logins (a WSL
+# terminal, a physical console) so it survives across shells. But NOT when you arrive
+# over ssh ($SSH_CONNECTION set): coming in over ssh you're normally already inside a
+# multiplexer on the client, so auto-attaching here just nests a mux you'd close
+# anyway. The trade is that a dropped ssh link no longer drops you back into a live
+# remote session — accepted, for not nesting. Run `tmux` by hand if you do want a
+# server-side session over ssh. Fleet-wide policy, mirrored in dotfiles-Windows'
+# powershell/os/30-windows.ps1 psmux auto-launch.
+# Also skip inside an existing tmux, VS Code's integrated terminal, non-TTYs, and when
 # DEBIAN_NO_TMUX is set (scp/rsync and `ssh host <cmd>` are already covered by -t 1).
 if command -v tmux >/dev/null 2>&1 \
-   && [[ -z "$TMUX" && -z "${DEBIAN_NO_TMUX:-}" && -t 1 && "$TERM_PROGRAM" != "vscode" ]]; then
+   && [[ -z "$TMUX" && -z "${DEBIAN_NO_TMUX:-}" && -z "${SSH_CONNECTION:-}" \
+         && -t 1 && "$TERM_PROGRAM" != "vscode" ]]; then
   tmux attach -t main 2>/dev/null || tmux new-session -s main
 fi
