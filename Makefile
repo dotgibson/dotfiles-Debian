@@ -24,6 +24,9 @@
 # `git ls-files '*.sh' ':!:core/**'`.
 SH_FILES  := $(shell git ls-files '*.sh' ':!:core/**' 2>/dev/null)
 ZSH_FILES := $(shell git ls-files '*.zsh' ':!:core/**' 2>/dev/null)
+# Same pathspec the reusable gate's markdown leg uses, so `make markdown` scans exactly
+# what CI scans — including the .github/ files a top-level '*.md' glob never saw.
+MD_FILES  := $(shell git ls-files '*.md' ':!:core/**' 2>/dev/null)
 
 help: ## Show this help
 	@echo "dotfiles-Debian — make targets:"
@@ -104,9 +107,20 @@ apt-first: ## Refuse an out-of-band install that could run BEFORE the apt base l
 	printf '\033[32m✓\033[0m out-of-band installs all follow the apt base list (line %s)\n' "$$base"
 
 markdown: ## markdownlint the repo-owned docs (shares .markdownlint.jsonc with Core)
-	@command -v markdownlint-cli2 >/dev/null 2>&1 \
-		|| { echo "markdownlint-cli2 not installed: npm i -g markdownlint-cli2 — skipping"; exit 0; }
-	@markdownlint-cli2 '*.md' '!core/**'
+	@# ONE recipe line, for the same reason as zsh-syntax above: make runs each line in
+	@# its own shell, so the guard's `exit 0` only ended THAT line — this printed
+	@# "skipping" and then ran the linter anyway, exiting 127 on any box without a global
+	@# markdownlint-cli2. Joining them makes the skip a real skip.
+	@#
+	@# The file list is `git ls-files`, not a `'*.md'` glob, to match what the gate
+	@# actually scans: lint-call.yml's markdown leg has been BLOCKING since dotfiles-core#592
+	@# and lints `git ls-files '*.md' ':!:core/**'` — which is recursive. The glob was
+	@# top-level only, so the three .github/ markdown files were CI-enforced and locally
+	@# invisible, and this target could read green against a red required check.
+	@if ! command -v markdownlint-cli2 >/dev/null 2>&1; then \
+	  echo "markdownlint-cli2 not installed: npm i -g markdownlint-cli2 — skipping"; \
+	elif test -z "$(MD_FILES)"; then echo "no repo-owned .md"; \
+	else echo "markdownlint-cli2 $(MD_FILES)"; markdownlint-cli2 $(MD_FILES); fi
 
 dry-run: ## Preview the FULL bootstrap plan (packages + symlinks); changes nothing
 	@./bootstrap.sh --dry-run
