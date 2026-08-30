@@ -60,9 +60,10 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
   this stack means is sid-only. Installed via `go install` instead.
 - `cargo`, and therefore `yazi`/`ast-grep`/`viddy`: noble's rustc is 1.75, too old to
   build them. All are `HAVE_*`-guarded in Core, so the shell degrades cleanly.
-- `wl-clipboard`/`xclip`: no display on these boxes. This leaves Core's `clip` without
-  a backend — see the README's *Headless clipboard* note for the OSC 52 fix, which
-  belongs upstream in `dotfiles-core`.
+- `wl-clipboard`/`xclip`: no display on these headless ubuntu/debian boxes. Tiered in
+  for Kali (`# only:kali`), which runs under WSL2 with WSLg. Copying still works
+  regardless: Core's `clip` falls back to OSC 52 when it finds no local backend.
+  Pasting does not, deliberately — see the README's *Headless clipboard* note.
 - PPAs, in any form. They are keyed to an Ubuntu series and would break the Debian
   lane; vendor-signed apt repos (Charm, 1Password) are used instead.
 

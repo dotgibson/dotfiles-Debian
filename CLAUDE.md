@@ -117,21 +117,39 @@ bootstraps on Ubuntu is a naming lie, and it would red the trixie CI lane. It is
 also unpinned and single-maintainer, which is exactly what `tool-versions.env`
 exists to avoid. Use a pinned release asset instead.
 
-## Headless: what that costs
+## Headless: what that costs — and what it no longer costs
 
-These are laptops on a shelf, reached only over SSH. There is no display, so
-`wl-clipboard`/`xclip` are deliberately absent — and **Core's `clip` therefore has
-no backend and exits 1**. That breaks `pbcopy`/`pbpaste` and tmux `copy-pipe`.
+**On noble and trixie** these are laptops on a shelf, reached only over SSH, so
+`wl-clipboard`/`xclip` are deliberately absent — there is no display for them to
+talk to. That is an ubuntu/debian fact, not a family one: `install/packages.txt`
+tiers both in with `# only:kali`, because Kali runs under WSL2 with WSLg, where
+`clip` execs `clip.exe` long before any of this applies.
 
-Neovim looks like it should survive (`core/nvim/lua/gerrrt/config/clipboard.lua`
-carries an OSC 52 fallback for exactly this case) but does not: that fallback is
-the `elseif` branch, reached only when `clip` is *absent*. Bootstrap symlinks
-`clip` into `~/.local/bin`, so the first branch wins and `"+y` routes through a
-script that always fails. The escape hatch exists and is unreachable.
+**Copy works.** Core's `clip` detects WSL → macOS → Wayland → X11 and, finding
+none, falls back to **OSC 52** (Core v4.13.0) — the escape sequence puts the
+payload on the clipboard of the machine you are sitting at, with nothing installed
+on the remote end. `pbcopy`, tmux `copy-pipe` and nvim's `"+y` all work over plain
+SSH because of it. `copy-pipe` needed its own server-side `tmux load-buffer -w -`
+arm (dotgibson/dotfiles-core#525): tmux runs that child under the daemonized
+server, which has no controlling terminal to write the sequence to.
 
-The real fix is an OSC 52 fallback **inside `core/bin/clip`**, which would restore
-zsh, tmux and nvim at once. That is a Core change and fans out to the whole fleet,
-so it is tracked upstream rather than worked around here.
+Two limits are real and are stated at `core/zsh/50-op.zsh:64-76`: a terminal may
+**silently refuse** the write (so "sent" is the strongest true claim), and under
+tmux with `set-clipboard on` the payload **also** lands in a tmux paste buffer,
+readable by anything that can reach the socket — which is why `optoken`'s
+"never touches your history" rationale has a hole in it (dotgibson/dotfiles-core#690).
+
+**Paste does not, by design.** `clip-paste` has no OSC 52 counterpart because
+reading means querying the terminal for a reply most refuse to send and some never
+answer — a paste that hangs is worse than one that fails. It says so and exits 1;
+`pbpaste` and `"+p` go with it. Use the terminal's own paste. See the README's
+*Headless clipboard* note for the full account.
+
+**Do not "fix" nvim.** `core/nvim/lua/gerrrt/config/clipboard.lua`'s OSC 52 branch
+is an `elseif` reached only when `clip` is *absent*, and bootstrap puts `clip` on
+PATH — so it never runs here. That is correct, not a bug: the first branch is the
+one carrying the fallback. The file says so at its own `elseif`; the reverse
+assumption costs an afternoon.
 
 ## Local commands
 
