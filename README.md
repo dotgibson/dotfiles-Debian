@@ -196,12 +196,13 @@ written up on the hub, alongside the per-distro **[porting matrix][porting]**:
 
 ### Headless clipboard — copy works, paste does not
 
-These boxes are SSH-only, so `wl-clipboard`/`xclip` are deliberately not installed:
-there is no display for them to talk to. Core's `clip` detects WSL → macOS → Wayland
-→ X11 and, finding none of them, falls back to **OSC 52** — base64-encoding the copy
-into an escape sequence written to the controlling terminal, which lands it on the
-clipboard of whatever you are sitting in front of. `pbcopy`, tmux `copy-pipe` and
-nvim's `"+y` all work over plain ssh because of it.
+The noble and trixie boxes are SSH-only, so `wl-clipboard`/`xclip` are deliberately
+not installed there: no display for them to talk to. (Kali is tiered in — it runs
+under WSL2 with WSLg, where `clip` execs `clip.exe` anyway.) Core's `clip` detects
+WSL → macOS → Wayland → X11 and, finding none of them, falls back to **OSC 52** —
+base64-encoding the copy into an escape sequence written to the controlling
+terminal, which lands it on the clipboard of whatever you are sitting in front of.
+`pbcopy`, tmux `copy-pipe` and nvim's `"+y` all work over plain ssh because of it.
 
 Paste does not, and the asymmetry is deliberate: `core/bin/clip-paste` has no OSC 52
 counterpart, because reading over OSC 52 means querying the terminal for a reply most
@@ -217,7 +218,10 @@ wins — which is right, because it is the branch that carries the fallback.
 Two cases still fail, both loudly. Many terminals silently drop an OSC 52 payload over
 roughly 100 KB of base64, so `clip` warns when one gets that large rather than letting
 you believe it landed. And with no controlling terminal at all — cron, a daemon,
-anything `setsid`'d — there is nothing to write the sequence to, and it exits 1.
+anything `setsid`'d — there is nothing to write the sequence to. The one exception is
+tmux: `copy-pipe` runs its child under the daemonized server, which has no tty either,
+so `clip` hands the payload to `tmux load-buffer -w -` from the server side instead.
+Outside tmux, that case exits 1.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
