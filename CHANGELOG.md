@@ -7,7 +7,8 @@ repo uses [Conventional Commits](https://www.conventionalcommits.org/). Release 
 cut by the `auto-tag` workflow when a Core sync lands.
 
 Changes to `core/` are **not** listed here — they arrive as Core releases; see
-[`core/CHANGELOG.md`](core/CHANGELOG.md) and the `core_version` in `core.lock`.
+[dotfiles-core's CHANGELOG](https://github.com/dotgibson/dotfiles-core/blob/main/CHANGELOG.md) and the `core_version` in
+`core.lock`.
 
 ## [Unreleased]
 
