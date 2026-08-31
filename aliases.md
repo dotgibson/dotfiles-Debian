@@ -1,6 +1,6 @@
 # Debian/Ubuntu Aliases Cheat Sheet
 
-OS-specific aliases from `os/debian.zsh`. See [`core/aliases.md`](core/aliases.md) for the universal alias
+OS-specific aliases from `os/debian.zsh`. See dotfiles-core's [`aliases.md`](https://github.com/dotgibson/dotfiles-core/blob/main/aliases.md) for the universal alias
 set that every machine in the fleet shares.
 
 ## Package Management (apt)

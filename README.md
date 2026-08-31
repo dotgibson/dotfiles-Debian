@@ -184,8 +184,8 @@ prompt — comes from vendored Core; this repo owns the Debian-family specifics:
 - `test/check-packages.sh` — the resolution + floor gate, also `make packages-check`
 - `os/debian.zsh` — apt/AppArmor/unattended-upgrades aliases → `~/.config/zsh/80-os.zsh`
 - `os/debian.conf` / `os/debian.gitconfig` — the tmux + git OS overlays
-- `aliases.md` — the Debian alias cheat sheet ([`core/aliases.md`](core/aliases.md) covers
-  the universal ones)
+- `aliases.md` — the Debian alias cheat sheet (dotfiles-core's
+  [`aliases.md`](https://github.com/dotgibson/dotfiles-core/blob/main/aliases.md) covers the universal ones)
 - `core/` — vendored from `dotfiles-core` (read-only here; edit upstream)
 
 The things that actually bite here — a frozen archive, `needrestart` hanging an
