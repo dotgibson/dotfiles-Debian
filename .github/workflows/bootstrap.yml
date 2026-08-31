@@ -25,7 +25,7 @@ jobs:
   # deadlock the path-filter note above warns about, arrived at from a different
   # direction. A second job adds new check names and leaves the required ones alone.
   test:
-    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v5
+    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v6
     with:
       image: ubuntu:24.04
       # curl is a HARD preflight requirement of bootstrap.sh (`need=(apt-get dpkg curl
@@ -55,7 +55,7 @@ jobs:
   # unrelated PRs. Treat a red here as a to-do, the same way packages.yml's advisory
   # lanes are read.
   test-kali:
-    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v5
+    uses: dotgibson/dotfiles-core/.github/workflows/bootstrap-test.yml@v6
     with:
       image: kalilinux/kali-rolling
       # curl is a HARD preflight requirement of bootstrap.sh (`need=(apt-get dpkg curl
