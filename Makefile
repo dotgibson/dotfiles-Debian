@@ -18,7 +18,7 @@
 # The vendored core/ is excluded from every check here: it is gated upstream.
 # ──────────────────────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := help
-.PHONY: help lint shellcheck syntax zsh-syntax trap-guard markdown check dry-run links-only packages-check tool-checksums integrity hooks clean capabilities
+.PHONY: help lint shellcheck syntax zsh-syntax trap-guard markdown check dry-run links-only packages-check tool-floors tool-checksums integrity hooks clean capabilities
 
 # Repo-owned shell only — core/ is gated upstream. Mirrors the reusable gate's
 # `git ls-files '*.sh' ':!:core/**'`.
@@ -33,7 +33,7 @@ help: ## Show this help
 	@grep -E '^[a-z][a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) \
 		| sed -E 's/:.*## /\t/' | sort | awk -F'\t' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-lint: shellcheck syntax zsh-syntax trap-guard apt-first capabilities ## The gate: shellcheck + bash -n + zsh -n + trap discipline + apt ordering
+lint: shellcheck syntax zsh-syntax trap-guard apt-first tool-floors capabilities ## The gate: shellcheck + bash -n + zsh -n + trap discipline + apt ordering + the presence guard
 	@printf '\033[32m✓\033[0m lint clean\n'
 
 shellcheck: ## ShellCheck the repo-owned bash (excludes the vendored core/)
@@ -80,11 +80,12 @@ trap-guard: ## Refuse a RETURN trap that does not disarm itself (shellcheck cann
 apt-first: ## Refuse an out-of-band install that could run BEFORE the apt base list
 	@# THE INVARIANT: provision() installs install/packages.txt first, and every
 	@# out-of-band install (verified_install / verified_tree_install / go install /
-	@# vendor apt repo) after it. Each of those is guarded by `command -v <binary>`,
-	@# so on a distro where apt already supplied the tool the guard fires and the
-	@# download is skipped. That guard is the ENTIRE mechanism behind the `# only:kali`
-	@# tier in install/packages.txt — Kali's archive tracks sid and has neovim,
-	@# starship, lazygit and friends, so apt lands them and the pinned fetch no-ops.
+	@# vendor apt repo) after it. Each of those is guarded by have_current_tool, so on
+	@# a distro where apt already supplied the tool AT A VERSION THAT CLEARS ITS FLOOR
+	@# the guard fires and the download is skipped. That guard is the ENTIRE mechanism
+	@# behind the `# only:kali` tier in install/packages.txt — Kali's archive tracks
+	@# sid and has neovim, starship, lazygit and friends, so apt lands them and the
+	@# pinned fetch no-ops. (`make tool-floors` gates the guard itself.)
 	@#
 	@# Reorder those two blocks and nothing errors: the guards simply all miss, every
 	@# tool is fetched out-of-band as well as from apt, and Kali quietly ends up with
@@ -130,6 +131,16 @@ links-only: ## Re-wire the symlinks on THIS machine (no apt, no downloads)
 
 packages-check: ## Do all install/packages.txt names resolve, and clear their version floors?
 	@./test/check-packages.sh install/packages.txt
+
+tool-floors: ## Does the presence guard still refuse a too-old apt build (and still no-op on a good one)?
+	@# The sibling of packages-check, asking the other half of the question. That one
+	@# asks what apt OFFERS; this asks what bootstrap does about what is already
+	@# INSTALLED. It belongs in `lint` rather than beside packages-check because it
+	@# needs no apt index and touches nothing — it runs stub binaries in a temp dir.
+	@#
+	@# In `lint` for the reason trap-guard is: CI's bootstrap job only runs
+	@# --links-only, so provision() and its guards are executed by no lane anywhere.
+	@./test/check-tool-floors.sh
 
 tool-checksums: ## Re-verify the pinned out-of-band assets against install/tool-versions.env
 	@./scripts/update-tool-checksums.sh --check

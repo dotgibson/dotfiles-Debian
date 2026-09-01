@@ -83,19 +83,34 @@ name    # only:kali,debian
 Fifteen names carry `# only:kali`: the tools noble cannot supply and this repo
 therefore fetches as pinned tarballs, `go install`s or vendor-repo packages, all of
 which Kali just has. **On Kali they come from apt and the out-of-band fetch skips
-itself** — no conditional exists for that, and none is needed: `provision()` installs
-the apt list first and every out-of-band install is already `command -v`-guarded.
-That ordering is load-bearing and `make apt-first` enforces it.
+itself** — no distro conditional exists for that, and none is needed: `provision()`
+installs the apt list first and every out-of-band install is guarded by
+`have_current_tool`. That ordering is load-bearing and `make apt-first` enforces it.
 
-Two rules worth internalising before editing that file:
+**The guard is version-aware, and has to be.** A bare `command -v` cannot tell a
+sid-fresh `neovim` 0.12.4 from noble's 0.9.5, and on this family that is the whole
+difference. A stray apt `neovim` — hand-installed, or predating the tier — answered
+the old guard, so the pinned 0.12.4 was never fetched, `~/.local/opt` was never
+created, and bootstrap printed *complete* over a box whose editor died at startup on
+`winborder`. `scripts/tool-floor.sh` now compares the installed version against the
+declared `# min:` floor: **too old installs the pin anyway and says so; new enough is
+still a pure no-op.** Keep both directions — `test/check-tool-floors.sh` gates them.
+
+Three rules worth internalising before editing that file:
 
 - **Repeat the `# min:` floor on a tiered line.** A floor states what *Core* needs,
   not how old an archive is. `neovim` below 0.12 breaks Core's pinned
   nvim-treesitter whether it came from a frozen suite or a rolling one, so tiering
   it in without `min:0.12.0` swaps a known-good pinned 0.12.4 for whatever apt has.
+  It has a second consumer now: drop the floor and bootstrap's guard goes blind again.
 - **`test/check-packages.sh` applies the same tier**, including in the floor loop.
   It has to: `neovim min:0.12.0` evaluated on noble finds 0.9.5 and reports a
   real-looking breach, reddening the lane it exists to certify.
+- **`bootstrap.sh` does the exact opposite — it reads floors UNFILTERED.** Both are
+  right. The tier decides *who installs the name from apt*; the floor states what
+  Core needs on every target. `neovim min:0.12.0` sits on an `# only:kali` line and
+  must still be legible on ubuntu, because that is where it decides to fetch the
+  tarball. Filter it there and the guard is blind again.
 
 ## Three things not to "fix"
 
@@ -157,13 +172,15 @@ assumption costs an afternoon.
 
 `make` — `lint` reproduces the CI gate, `check` adds a hermetic `--links-only` run,
 `dry-run` previews a full install, `packages-check` resolves every package name and
-checks the declared floors, `tool-checksums` re-verifies the pinned assets, and
+checks the declared floors, `tool-floors` proves the presence guard still honours
+them in both directions, `tool-checksums` re-verifies the pinned assets, and
 `integrity` checks vendored Core against `core.lock`.
 
 ## Where things are
 
 - `os/debian.zsh` — apt/AppArmor/unattended-upgrades aliases, tmux auto-attach, WSL2 bits
 - `scripts/pkg-filter.sh` — the distro tier for `install/packages.txt` (see above)
+- `scripts/tool-floor.sh` — `have_current_tool`, the version-aware presence guard
 - `wsl/` — `wsl.conf` (distro-side, installed by bootstrap when on WSL) and
   `windows.wslconfig.example` (Windows-side; `networkingMode=mirrored` cannot be set
   from inside the distro, which is the most common WSL misconfiguration there is)
@@ -171,7 +188,9 @@ checks the declared floors, `tool-checksums` re-verifies the pinned assets, and
 - `install/packages.txt` — only what apt can honestly satisfy (with `# min:` floors)
 - `install/tool-versions.env` — the pinned, SHA-256'd out-of-band assets
 - `scripts/update-tool-checksums.sh` — refresh those pins (`--check`, `--latest`)
-- `test/check-packages.sh` — resolution + version-floor gate
+- `test/check-packages.sh` — resolution + version-floor gate (what apt offers)
+- `test/check-tool-floors.sh` — the presence guard's gate (what is already installed);
+  `provision()` is run by no CI lane, which is how the blind guard shipped green
 - `bootstrap.sh` — apt provision + out-of-band installs + Core/OS symlink wiring
 - `core/` — vendored Core (read-only here; edit upstream in dotfiles-core)
 
