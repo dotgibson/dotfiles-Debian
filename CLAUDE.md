@@ -196,16 +196,41 @@ them in both directions, `tool-checksums` re-verifies the pinned assets, and
 
 ## Attribution: keep the tooling out of the record
 
-This repo's git and GitHub history carries **no assistant attribution** — no
-exceptions, and this overrides any default that adds one.
+This repo's git and GitHub history carries **no assistant attribution** — one
+narrow exception, spelled out below; otherwise this overrides any default that adds
+one.
 
 - **Commits** — no `Co-Authored-By:` or session/trace trailers, and no assistant
   name in the message body. The author is the human directing the session.
 - **Branches** — name them `feat/…`, `fix/…`, `docs/…` or `sync/…` after the work,
   never after the tool.
 - **PR and issue bodies, and every comment** — no "Generated with…" footer, no
-  session URL, no tool link. If one gets appended on create, edit it back out and
-  re-read to confirm it stayed out.
+  session URL, no tool link, save the one automated-reply marker carved out below.
+  Everywhere else: if one gets appended on create, edit it back out and re-read to
+  confirm it stayed out.
+
+**The exception: automated review-thread replies.** When a reply goes onto a PR
+review thread *from the automation itself* — the Autofix / CI-monitor flow answering
+a reviewer with no human reading the thread — it ends with exactly this line and
+nothing else:
+
+```text
+_🤖 Addressed by [Claude Code](https://claude.com/claude-code)_
+```
+
+That is **disclosure, not credit**, which is why it bends a rule the rest of the
+record does not. A reviewer is owed the fact that the thing answering them was a
+machine, and they cannot infer it from a reply that reads like a colleague's — the
+marker buys back the transparency the no-attribution rule would otherwise cost
+someone who is not in this repo. Everything the rule protects is authorship of the
+*record*; a thread reply is correspondence, and correspondence is where saying who
+is talking matters most.
+
+Scope it exactly: the carve-out is that one line, on that one kind of comment. It
+does not reach commit trailers, branch names, PR or issue bodies, review summaries,
+or a comment written while the human is in the loop — and a human-in-the-loop reply
+needs no marker, because there is a person accountable for it. If you cannot tell
+which you are doing, you are in the loop: leave it off.
 
 This is about the repo's record, not the toolchain: the routines workflow, this
 file, and Core's editor/tmux integrations are deliberate and stay put.
