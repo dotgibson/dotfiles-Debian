@@ -186,8 +186,9 @@ one.
 - **Branches** — name them `feat/…`, `fix/…`, `docs/…` or `sync/…` after the work,
   never after the tool.
 - **PR and issue bodies, and every comment** — no "Generated with…" footer, no
-  session URL, no tool link. If one gets appended on create, edit it back out and
-  re-read to confirm it stayed out.
+  session URL, no tool link, save the one automated-reply marker carved out below.
+  Everywhere else: if one gets appended on create, edit it back out and re-read to
+  confirm it stayed out.
 
 **The exception: automated review-thread replies.** When a reply goes onto a PR
 review thread *from the automation itself* — the Autofix / CI-monitor flow answering
