@@ -53,6 +53,15 @@ BLIB_SU="sudo"
 # shellcheck source=scripts/tool-floor.sh
 source scripts/tool-floor.sh
 
+# The header promises exit 1 for an unreadable manifest, so actually check it. Without
+# this, a missing install/packages.txt makes _tool_floor return nothing, every floor
+# assertion fails, and the run exits 2 — reporting a guard REGRESSION when the real
+# problem is that the file it reads is gone. Wrong diagnosis, and the loud kind.
+[[ -r "$TOOL_MANIFEST" ]] || {
+  bad "manifest not readable: $TOOL_MANIFEST"
+  exit 1
+}
+
 STUBS="$(mktemp -d)"
 trap 'rm -rf "$STUBS"' EXIT
 
@@ -154,6 +163,17 @@ check current delta "no declared floor → presence alone is enough"
 stub nvim "no version here"
 check current nvim "unparseable --version → leave it alone"
 [[ "$WARNED" == *"unreadable"* ]] || { bad "an unparseable --version must warn"; rc=2; }
+
+# A banner LARGER than the 64K pipe buffer. This is the regression guard for the shape
+# `"$(tool --version | head -1)" || out=""`, which reads the first line correctly and
+# then discards it: head exits, the tool takes SIGPIPE, pipefail makes the substitution
+# non-zero, and the fallback wipes it. Under the old spelling this case came back empty
+# 20 times out of 20 — i.e. "unreadable", i.e. stand down, i.e. skip a pinned install
+# that was needed. A version banner under 64K never shows it, which is why nvim's own
+# 168-byte output kept passing.
+printf '#!/bin/sh\nprintf "NVIM v0.9.5\\n"\nyes padding-to-overflow-the-pipe-buffer | head -200000\n' >"$STUBS/nvim"
+chmod +x "$STUBS/nvim"
+check stale nvim "0.9.5 behind a >64K banner → still read, still stale"
 
 # bootstrap.sh runs under `set -euo pipefail`, and this guard is called from inside it.
 # Every case above ran in an if-condition, where errexit is suspended — so none of them

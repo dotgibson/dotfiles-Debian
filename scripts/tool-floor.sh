@@ -83,11 +83,26 @@ _tool_floor() {
 #
 # `timeout` because this runs an arbitrary binary off PATH, and `</dev/null` because one
 # that decides to prompt would otherwise hang a bootstrap nobody is watching.
+#
+# NO PIPELINE, deliberately. The obvious spelling — `"$(… | head -1)" || out=""` — is
+# broken in a way that only shows on big output: head exits after the first line, the
+# tool is still writing, it takes SIGPIPE, and `set -o pipefail` (bootstrap.sh runs
+# `set -euo pipefail`) turns that into a non-zero substitution. The `||` fallback then
+# throws away a first line that had already been read perfectly. Measured: a banner
+# under the 64K pipe buffer never trips it, one over it trips 20 times out of 20 — and
+# the result is an empty version, read as "unreadable", read as "stand down", which
+# silently skips a pinned install. That is the exact class of silence this file exists
+# to end, so the whole shape is gone: capture everything, slice in the shell, and match
+# with bash's own regex engine. `|| true` on the capture keeps a tool that prints its
+# version and then exits non-zero.
 _tool_version() {
-  local out=""
-  out="$(timeout 5 "$1" --version 2>/dev/null </dev/null | head -1)" || out=""
-  [[ -n "$out" ]] || return 0
-  printf '%s' "$out" | grep -oE '[0-9]+(\.[0-9]+)+' | head -1 || true
+  local out="" re='[0-9]+(\.[0-9]+)+'
+  out="$(timeout 5 "$1" --version 2>/dev/null </dev/null)" || true
+  out="${out%%$'\n'*}"
+  [[ "$out" =~ $re ]] && printf '%s\n' "${BASH_REMATCH[0]}"
+  # Explicit: the [[ ]] above is the last command, and a non-match returns 1 — which
+  # `have="$(_tool_version …)"` would take as fatal under set -e.
+  return 0
 }
 
 # have_current_tool <binary> — 0 when <binary> is already on PATH AND new enough that the
