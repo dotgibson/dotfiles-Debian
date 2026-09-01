@@ -15,10 +15,13 @@
 # 00-tools.zsh already resolves both, and 20-aliases.zsh aliases them back. Don't
 # "fix" that here.
 #
-# `# min:X.Y.Z` trailing comments are a CONTRACT, not prose: test/check-packages.sh
-# compares the apt candidate against them with `dpkg --compare-versions`. Name
-# resolution alone is not enough on a frozen archive — neovim 0.9.5 and
-# tree-sitter-cli 0.20.8 both resolve fine and both break the box.
+# `# min:X.Y.Z` trailing comments are a CONTRACT, not prose, and they now have TWO
+# readers. test/check-packages.sh compares the apt CANDIDATE against them with
+# `dpkg --compare-versions`; scripts/tool-floor.sh compares what is already INSTALLED
+# against the same number, and that is what decides whether bootstrap.sh fetches the
+# pinned tarball. Name resolution alone is not enough on a frozen archive — neovim
+# 0.9.5 and tree-sitter-cli 0.20.8 both resolve fine and both break the box. Delete a
+# floor and you do not merely lose a check: the out-of-band install goes blind.
 #
 # `# only:<ids>` / `# skip:<ids>` are the DISTRO TIER, read by scripts/pkg-filter.sh
 # and applied before blib_read_pkgs. IDs are /etc/os-release ID values, comma-separated,
@@ -138,8 +141,13 @@ unattended-upgrades    # security-pocket auto-updates; these boxes are unattende
 # below 0.12 breaks Core's pinned nvim-treesitter whether it came from a frozen suite or
 # a rolling one. Tiering a package in without its floor would silently swap a pinned,
 # known-good 0.12.4 for whatever apt happens to have — a DOWNGRADE dressed as a
-# simplification. test/check-packages.sh applies the same tier as bootstrap.sh, so the
-# kali lane checks these floors on kali and nowhere else.
+# simplification.
+#
+# The two readers treat the TIER oppositely, and both are correct. test/check-packages.sh
+# filters — it asks what apt offers, so a kali-only name must not be resolved on noble
+# (it would find 0.9.5 and report a real-looking breach in the lane meant to certify it).
+# scripts/tool-floor.sh does NOT filter — it asks what Core needs, which is true on all
+# three targets, and on noble this line is the reason nvim arrives as a tarball at all.
 neovim                 # only:kali  min:0.12.0  — Core's nvim-treesitter hard-requires
                        #             0.12; pinned NVIM_VERSION on ubuntu/debian
 tree-sitter-cli        # only:kali  min:0.26.1  — nvim-treesitter's floor (core's
