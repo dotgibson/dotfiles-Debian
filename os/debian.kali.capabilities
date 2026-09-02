@@ -7,8 +7,9 @@
 #
 # THE SOURCE of core/PORTING-MATRIX.md §"Package-manager commands", Kali (apt)
 # column (debian.capabilities is the Debian/Ubuntu one; every apt verb is identical) —
-# the table is rendered from this file (dotfiles-core#686): edit here, then run
-# `make gen-porting-matrix` in dotfiles-core.
+# the table is rendered from this file since dotfiles-core#686 (a vendored core/ older
+# than that still says the reverse): edit here, then run `make gen-porting-matrix`
+# in dotfiles-core.
 # Validate with:  core/scripts/check-capabilities.sh os/debian.kali.capabilities
 #
 # ══════════════════════════════════════════════════════════════════════════════
