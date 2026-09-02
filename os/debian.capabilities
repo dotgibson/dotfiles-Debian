@@ -5,8 +5,10 @@
 # maint/dotfiles-maint.sh, which is bash. bootstrap.sh links it to
 # $ZDOTDIR/os.capabilities via blib_link_os_layer.
 #
-# Transcribed from core/PORTING-MATRIX.md §"Package-manager commands", the
-# Debian/Ubuntu and Kali columns — which are identical for every apt verb.
+# THE SOURCE of core/PORTING-MATRIX.md §"Package-manager commands", Debian/Ubuntu
+# column (debian.kali.capabilities is the Kali one; every apt verb is identical) —
+# the table is rendered from this file (dotfiles-core#686): edit here, then run
+# `make gen-porting-matrix` in dotfiles-core.
 # Validate with:  core/scripts/check-capabilities.sh os/debian.capabilities
 #
 # ══════════════════════════════════════════════════════════════════════════════
