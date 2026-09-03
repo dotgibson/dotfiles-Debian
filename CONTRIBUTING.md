@@ -55,6 +55,8 @@ make help          # list every target
 make lint          # shellcheck + bash -n + zsh -n, exactly as CI runs them
 make check         # lint + a hermetic --links-only run in a throwaway HOME
 make dry-run       # preview the full bootstrap plan; changes nothing
+make test          # the repo's own suite (test/)
+make core-verify   # vendored core/ is pristine vs core.lock (needs a sibling Core)
 make hooks         # install the pre-commit hooks (needs `pre-commit`)
 ```
 
@@ -105,6 +107,10 @@ Two package-level gates back that up:
 make packages-check            # every name resolves, and clears its declared floor
 make tool-checksums            # every pinned asset still hashes to its pin
 ```
+
+`make test` runs everything under `test/`, which today is exactly that first gate —
+`packages-check` is its only prerequisite. Add a second suite script as another
+prerequisite of `test`, not as another line in `packages-check`.
 
 ## Reporting bugs
 

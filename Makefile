@@ -18,7 +18,12 @@
 # The vendored core/ is excluded from every check here: it is gated upstream.
 # ──────────────────────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := help
-.PHONY: help lint shellcheck syntax zsh-syntax trap-guard markdown check dry-run links-only packages-check tool-floors tool-checksums integrity hooks clean capabilities
+# Every canonical fleet verb is declared here, aliases included. `test` MUST be .PHONY:
+# it names the `test/` directory it runs, and an undeclared one is "up to date" — make
+# would print that and run nothing, which is exactly the silently-green suite Core's
+# register refuses to credit (dotfiles-core#691).
+.PHONY: help lint shellcheck syntax zsh-syntax trap-guard apt-first markdown check dry-run links-only \
+        packages-check test tool-floors tool-checksums core-verify integrity hooks clean capabilities
 
 # Repo-owned shell only — core/ is gated upstream. Mirrors the reusable gate's
 # `git ls-files '*.sh' ':!:core/**'`.
@@ -132,6 +137,15 @@ links-only: ## Re-wire the symlinks on THIS machine (no apt, no downloads)
 packages-check: ## Do all install/packages.txt names resolve, and clear their version floors?
 	@./test/check-packages.sh install/packages.txt
 
+# ONE suite, several scripts, and none is a rename of another: `packages-check` is the
+# fleet verb for "resolve the package list", `tool-floors` the presence-guard check below
+# (also run from `lint`), and `test` the fleet verb for "run this repo's own suite"
+# (dotfiles-core#691). `test` is the canonical entry point for everything under test/, so
+# it gathers the suite scripts as prerequisites rather than repeating their command lines
+# — a new test/ script is added here, not folded into another target's recipe.
+test: packages-check tool-floors ## Run the repo's own suite (everything under test/)
+	@printf '\033[32m✓\033[0m tests pass\n'
+
 tool-floors: ## Does the presence guard still refuse a too-old apt build (and still no-op on a good one)?
 	@# The sibling of packages-check, asking the other half of the question. That one
 	@# asks what apt OFFERS; this asks what bootstrap does about what is already
@@ -163,7 +177,7 @@ check: lint ## lint + a hermetic --links-only run against a throwaway HOME
 	rm -rf "$$tmp"; \
 	test $$rc -eq 0 && printf '\033[32m✓\033[0m symlink graph OK\n' || exit 1
 
-integrity: ## Verify the vendored core/ is pristine vs core.lock (needs a sibling dotfiles-core)
+core-verify: ## Verify the vendored core/ is pristine vs core.lock (needs a sibling dotfiles-core)
 	@ref=../dotfiles-core; \
 	test -d "$$ref" || { echo "needs a sibling clone of dotfiles-core at $$ref"; echo "(the core_sha in core.lock only resolves in Core's object store — see core.lock)"; exit 1; }; \
 	git -C "$$ref" cat-file -e "$$(sed -n 's/^core_sha=//p' core.lock)" 2>/dev/null || { \
@@ -171,6 +185,8 @@ integrity: ## Verify the vendored core/ is pristine vs core.lock (needs a siblin
 	  echo "   UNVERIFIABLE, which reads like tampering but only means 'fetch Core')"; \
 	  git -C "$$ref" fetch --quiet origin || true; }; \
 	"$$ref/scripts/core-integrity.sh" --self "$(CURDIR)"
+
+integrity: core-verify ## (alias) the spelling this repo used before the fleet vocabulary
 
 hooks: ## Install the pre-commit hooks into this clone
 	@command -v pre-commit >/dev/null 2>&1 || { echo "pre-commit not installed: pip install pre-commit"; exit 1; }
