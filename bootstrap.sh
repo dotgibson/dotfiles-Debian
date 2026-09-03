@@ -109,6 +109,12 @@ source "$DOTFILES/core/lib/bootstrap-lib.sh"
 # Core's blib_read_pkgs rather than replacing it — see scripts/pkg-filter.sh's header.
 # shellcheck source=scripts/pkg-filter.sh
 source "$DOTFILES/scripts/pkg-filter.sh"
+# have_current_tool — the presence guard every out-of-band install below is gated on,
+# and the `# min:` floor it honours. Sourced rather than inlined so test/check-tool-floors.sh
+# can exercise it directly: provision() is run by no CI job here, which is exactly how the
+# version-blind version of this guard shipped green. See scripts/tool-floor.sh's header.
+# shellcheck source=scripts/tool-floor.sh
+source "$DOTFILES/scripts/tool-floor.sh"
 
 # Apply any --only/--skip module selection now the validator (blib_select) exists;
 # it aborts on a malformed selector or an unknown group.
@@ -124,6 +130,18 @@ if ((SKIP_SEEN)); then blib_select --skip "$SKIP_RAW"; fi
 FAILED_STEPS=()
 note_fail() {
   FAILED_STEPS+=("$1")
+  blib_warn "$1"
+}
+
+# A SECOND list, deliberately not FAILED_STEPS. When apt has a tool at a version below
+# the floor Core needs, the pinned build installs over it and that step SUCCEEDS — so
+# counting it as a failure would be a lie, and --strict would start failing boxes that
+# are fine. But the apt package stays on the machine and will keep answering the
+# presence guard on every future run, so it cannot be silent either. It gets its own
+# heading in the closing report.
+SHADOWED_TOOLS=()
+note_shadow() {
+  SHADOWED_TOOLS+=("$1")
   blib_warn "$1"
 }
 
@@ -354,7 +372,8 @@ fi
 : "${CARAPACE_VERSION:=}"
 
 # _vi_fetch <binary> <url> <sha256> <outvar> — shared front half of the installers:
-# skip if already present, refuse a bad/missing pin, download, verify. Echoes the temp
+# skip if already present AND new enough (have_current_tool, in scripts/tool-floor.sh),
+# refuse a bad/missing pin, download, verify. Echoes the temp
 # dir path into <outvar>. Returns non-zero when the caller should stop (already
 # installed, or a fail-closed condition) — callers treat that as "nothing to do".
 #
@@ -370,7 +389,10 @@ fi
 # Keep these prefixed, and keep them out of step with the caller's names.
 _vi_fetch() {
   local _vi_bin="$1" _vi_url="$2" _vi_want="$3" _vi_outvar="$4"
-  command -v "$_vi_bin" >/dev/null 2>&1 && return 1
+  # Present AND new enough → nothing to do (the Kali no-op). Present but below the floor
+  # install/packages.txt declares → fall through and fetch the pin, which lands in
+  # ~/.local/bin and shadows it. See have_current_tool.
+  have_current_tool "$_vi_bin" && return 1
 
   local _vi_arch; _vi_arch="$(uname -m)"
   if [[ "$_vi_arch" != x86_64 ]]; then
@@ -510,7 +532,8 @@ _dotfiles_go_install() { # <import-path@version> <binary-name>
   # PATH (it prefixes ~/.local/bin and ~/.cargo/bin) — so pin GOBIN to ~/.local/bin
   # or the tool would still read as "missing" after bootstrap.
   [[ "$#" -ge 2 ]] || return 0
-  if command -v "$2" >/dev/null 2>&1; then return 0; fi
+  # Same guard as the verified installs, for the same reason — one definition, not two.
+  if have_current_tool "$2"; then return 0; fi
   command -v go >/dev/null 2>&1 || {
     note_fail "$2: go is not installed — SKIPPED"
     return 0
@@ -578,12 +601,13 @@ provision() {
   fi
 
   # ORDER IS LOAD-BEARING: this must stay AHEAD of every out-of-band install below.
-  # Each of those is guarded by `command -v <binary>`, so on a distro where apt already
-  # supplied the tool the guard fires and the download no-ops. That is the whole
-  # mechanism behind install/packages.txt's `# only:kali` tier — Kali's archive tracks
-  # sid and simply has neovim/starship/lazygit/…, so apt lands them here and the pinned
-  # fetches skip themselves. No conditional is needed, and adding one would duplicate a
-  # guard that already exists and can drift from it.
+  # Each of those is guarded by have_current_tool, so on a distro where apt already
+  # supplied the tool AT A VERSION THAT CLEARS ITS DECLARED FLOOR the guard fires and the
+  # download no-ops. That is the whole mechanism behind install/packages.txt's
+  # `# only:kali` tier — Kali's archive tracks sid and simply has neovim/starship/
+  # lazygit/…, so apt lands them here and the pinned fetches skip themselves. No
+  # conditional is needed, and adding one would duplicate a guard that already exists
+  # and can drift from it.
   #
   # Reorder these two blocks and nothing errors — the guards just all miss, and Kali ends
   # up with a pinned tarball shadowing its distro build. `make apt-first` pins the order.
@@ -648,11 +672,15 @@ provision() {
   # (proven by the kali packages lane, which is the only place that difference shows).
   # They are `# skip:kali` in the manifest and land here instead.
   #
-  # No distro conditional, on purpose. _vi_fetch returns early when `command -v <bin>`
+  # No distro conditional, on purpose. _vi_fetch returns early when have_current_tool
   # already answers, so on noble and trixie — where apt installed git-delta and hexyl
   # minutes earlier in this same provision() — these two calls cost one PATH lookup and
   # download nothing. On Kali the lookup misses and the pinned asset is fetched. Same
   # guard that makes the `# only:kali` tier work, running in the opposite direction.
+  #
+  # Neither declares a `# min:` floor, so the guard stays purely presence-based for them
+  # — which is what you want here. Comparing against DELTA_VERSION/HEXYL_VERSION instead
+  # would re-download on every noble run, since apt's build trails the pin by design.
   verified_install delta \
     "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
     "$DELTA_SHA256"
@@ -889,8 +917,11 @@ elif ((BLIB_DRY)); then
   else
     blib_warn "install/packages.txt is missing — a real run would abort here"
   fi
+  # Through have_current_tool, not a bare `command -v` — otherwise a preview on a box
+  # carrying a too-old apt build reports nothing at all about the tool that is about to
+  # be replaced, which is the very blind spot this guard exists to close.
   for _t in "${OUT_OF_BAND_TOOLS[@]}"; do
-    command -v "$_t" >/dev/null 2>&1 || blib_say "would install (out of band): $_t"
+    have_current_tool "$_t" || blib_say "would install (out of band): $_t"
   done
   unset _t
   ((DO_UNATTENDED)) && blib_say "would configure unattended-upgrades (security pocket)"
@@ -913,6 +944,21 @@ blib_wire_summary
 # Say plainly what did NOT work. A script that prints "complete" and exits 0 no matter
 # how many best-effort steps failed makes a half-provisioned box look identical to a
 # good one — and on a frozen archive, best-effort steps DO fail.
+# Reported BEFORE the failures and separately from them: nothing failed here — the
+# pinned build installed and, because ~/.local/bin precedes /usr/bin, the shell resolves
+# the right one. What is left is a stale apt package that will answer the presence guard
+# on every future run, which is exactly how the silent version of this bug survived.
+if ((${#SHADOWED_TOOLS[@]})); then
+  printf '\n%s%s%s %s\n' "${UX_YEL:-}" "${UX_WARN:-!}" "${UX_RST:-}" \
+    "${#SHADOWED_TOOLS[@]} tool(s) are installed from apt BELOW the floor Core needs:"
+  printf '    - %s\n' "${SHADOWED_TOOLS[@]}"
+  printf '    %s\n' \
+    "The pinned build in ~/.local/bin shadows each of these, so the shell is correct." \
+    "Purge the apt package anyway — otherwise it keeps satisfying the presence guard," \
+    "and any PATH that does not put ~/.local/bin first gets the old binary."
+  echo
+fi
+
 if ((${#FAILED_STEPS[@]})); then
   printf '\n%s%s%s %s\n' "${UX_YEL:-}" "${UX_WARN:-!}" "${UX_RST:-}" \
     "${#FAILED_STEPS[@]} step(s) did not complete:"
