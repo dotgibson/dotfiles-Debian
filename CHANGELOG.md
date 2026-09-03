@@ -14,6 +14,25 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Added
 
+- **The canonical fleet `make` verbs: `test` and `core-verify`
+  (dotgibson/dotfiles-core#691).** Nine repos had nine dialects — "verify core" had five
+  spellings across the fleet, "dry run" two, and only `help` was common to every
+  Makefile, so a contributor moving between repos re-learned the verbs each time and no
+  gate noticed. `dotfiles-core`'s `scripts/make-vocabulary.txt` now declares the seven
+  names once (`help`, `lint`, `check`, `dry-run`, `packages-check`, `core-verify`,
+  `test`) and its `make fleet-vocabulary` register reports, per repo, which resolve.
+  This repo already had five.
+  - `make test` runs this repo's own suite — `test/check-packages.sh` (does every name
+    still resolve?) and `test/check-tool-floors.sh` (does the presence guard still refuse
+    a too-old apt build?). Both already had their own entry points, `packages-check` and
+    `tool-floors`, and keep them; `test` is the fleet-wide name for "run what this repo
+    tests". Off apt the first exits 0 with a stated skip, the second is hermetic and runs
+    anywhere.
+  - `core-verify` is the canonical name for what this repo spelled `integrity`. The
+    recipe is unchanged; `integrity` remains as a two-line alias, so anything already
+    calling it — muscle memory, a local script, a runbook line — keeps working. The
+    requirement is that the canonical name *exists*, not that the old one dies.
+
 - **`os/debian.capabilities` and `os/debian.kali.capabilities`** — this repo's Core v5
   capability declarations (dotgibson/dotfiles-core#663, #667). Core's `up`, maint runner
   and `core-doctor` now dispatch through them. The apt verbs are identical on all three
