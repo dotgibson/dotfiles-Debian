@@ -157,8 +157,15 @@ assumption costs an afternoon.
 
 `make` — `lint` reproduces the CI gate, `check` adds a hermetic `--links-only` run,
 `dry-run` previews a full install, `packages-check` resolves every package name and
-checks the declared floors, `tool-checksums` re-verifies the pinned assets, and
-`integrity` checks vendored Core against `core.lock`.
+checks the declared floors, `test` runs the repo's own suite (which is that same
+check today), `tool-checksums` re-verifies the pinned assets, and `core-verify`
+checks vendored Core against `core.lock`.
+
+Those seven verbs — `help`, `lint`, `check`, `dry-run`, `packages-check`,
+`core-verify`, `test` — are the **fleet vocabulary** Core declares once in
+`scripts/make-vocabulary.txt` (dotfiles-core#691) and reports on via `make
+fleet-vocabulary`. Renaming one here breaks a promise made in nine repos; the
+pre-vocabulary spelling `integrity` survives as a `.PHONY` alias of `core-verify`.
 
 ## Where things are
 

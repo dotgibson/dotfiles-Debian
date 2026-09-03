@@ -14,6 +14,19 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Added
 
+- **`make test` and `make core-verify`** — the two canonical fleet verbs this repo was
+  missing (dotgibson/dotfiles-core#691, reported by dotgibson/dotfiles-core#846's
+  register). Core now declares one `make` vocabulary for every repo that vendors it —
+  `help`, `lint`, `check`, `dry-run`, `packages-check`, `core-verify`, `test` — after
+  nine repos turned out to speak nine dialects, with "verify core" alone spelled five
+  ways. `test` runs the repo's own suite, which today is exactly
+  `test/check-packages.sh`, so `packages-check` is its only prerequisite rather than a
+  copied command line; it is declared `.PHONY` because it names the `test/` directory it
+  runs and an undeclared `test:` would report "up to date" and run nothing. The
+  requirement is that the canonical name **exists**, not that the old one dies, so
+  `integrity` stays as a `.PHONY` alias of `core-verify` and muscle memory survives.
+  Verify from a Core checkout beside this one with `make fleet-vocabulary`.
+
 - **`os/debian.capabilities` and `os/debian.kali.capabilities`** — this repo's Core v5
   capability declarations (dotgibson/dotfiles-core#663, #667). Core's `up`, maint runner
   and `core-doctor` now dispatch through them. The apt verbs are identical on all three

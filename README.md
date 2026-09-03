@@ -182,6 +182,7 @@ prompt — comes from vendored Core; this repo owns the Debian-family specifics:
 - `install/tool-versions.env` — the pinned, SHA-256-verified upstream assets
   (`scripts/update-tool-checksums.sh` refreshes them; `--latest` reports newer releases)
 - `test/check-packages.sh` — the resolution + floor gate, also `make packages-check`
+  and `make test` (the repo's whole suite today)
 - `os/debian.zsh` — apt/AppArmor/unattended-upgrades aliases → `~/.config/zsh/80-os.zsh`
 - `os/debian.conf` / `os/debian.gitconfig` — the tmux + git OS overlays
 - `aliases.md` — the Debian alias cheat sheet (dotfiles-core's
@@ -243,6 +244,7 @@ This is an **OS-native layer**, so the contribution rule is a boundary rule:
 make          # list every target
 make lint     # the gate: shellcheck + bash -n + zsh -n, exactly as CI runs it
 make check    # lint + a hermetic --links-only run in a throwaway HOME
+make test     # the repo's own suite (test/check-packages.sh)
 make hooks    # install the pre-commit hooks (shellcheck, markdownlint, gitleaks)
 ```
 
