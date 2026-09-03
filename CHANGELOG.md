@@ -83,6 +83,29 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Fixed
 
+- **`make check` was not hermetic, and wrote Core into your real config dir
+  (dotgibson/dotfiles-core#852).** The target promises "a hermetic `--links-only` run
+  against a throwaway HOME" and redirected only `HOME` — but `bootstrap.sh` resolves its
+  target as `CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"`, and `core/lib/bootstrap-lib.sh`
+  defaults `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME` and
+  `ZDOTDIR` the same way. A `:-`/`:=` default applies **only when the variable is unset**,
+  so for anyone who exports `XDG_CONFIG_HOME` the run wired Core into their live config
+  tree and then failed its own assertions, which look under the temp dir bootstrap never
+  touched — a gate that mutates the box it was only supposed to inspect, then blames the
+  tree. Reproduced against the byte-identical recipe in `dotfiles-Fedora`
+  (dotgibson/dotfiles-Fedora#153); only the package manager differs between the two repos
+  here, and the `--links-only` path is the same Core code. Fixed with `env -u` for the
+  five variables the bootstrap path consults — the fix `dotfiles-openSUSE` had already
+  reached locally.
+- **`make check`'s `mktemp -d` was unguarded**, so a failure left `$tmp` empty and the
+  next line ran `mkdir -p "$tmp/.config/tmux/plugins/tpm"` — `/.config/…` on the real
+  filesystem. It now refuses, and a `trap` replaces the two hand-placed `rm -rf`s so an
+  interrupted run cleans up too.
+- **`make check` accepted a commented-out loader line.** `grep -q "source .*loader.zsh"`
+  matched `# source ~/.config/zsh/loader.zsh`, and its unescaped `.` also matched
+  `loaderXzsh`. Now `grep -qE '^[^#]*source .*loader\.zsh'`, and both `~/.zshrc` greps
+  are `2>/dev/null` so a missing file reports once instead of twice.
+
 - `make zsh-syntax` printed "zsh not installed — skipping" and then ran `zsh -n`
   anyway. Each `make` recipe line runs in its own shell, so the guard's `exit 0` only
   ended that line. The same shape is still present in the other OS repos' Makefiles.
