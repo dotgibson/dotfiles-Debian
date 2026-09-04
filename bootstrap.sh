@@ -552,7 +552,25 @@ provision() {
   # land in ~/.local/bin (and ~/.cargo/bin), which are NOT on PATH during a fresh
   # bootstrap — os/debian.zsh adds them, and that has not been sourced yet. Without this
   # prelude every re-run would redo work it had already done.
-  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  #
+  # Core's helper, NOT the hand-rolled `export PATH=` this used to be. The literal list was
+  # a fork of core/lib/bootstrap-lib.sh :: blib_user_bindirs_on_path, and it was missing
+  # GOBIN — which this script SETS, to ~/.local/bin, so the omission happened to be
+  # harmless here and would stop being so the moment that changed. The helper resolves
+  # CARGO_HOME and GOBIN/GOPATH rather than hard-coding them. Two other repos had grown
+  # their own copy of this and a third had none at all, which is how the same defect
+  # shipped live to openSUSE (dotgibson/dotfiles-core#748).
+  #
+  # `mkdir -p` FIRST, and that line is load-bearing rather than tidy. The helper adds only
+  # directories that EXIST — deliberately, so it cannot inject a bogus PATH entry — but the
+  # `export PATH=` this replaces added ~/.local/bin unconditionally. On a fresh box that
+  # directory does not exist yet, so a straight swap would silently DROP it from PATH for
+  # the whole first run, and the `command -v uv` / `command -v atuin` probes further down
+  # would miss binaries verified_install had just written there: no `ty`, no atuin daemon
+  # unit, on exactly the boxes this script is for. Creating the directory we are about to
+  # install into is a statement of intent, not a guess.
+  mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+  blib_user_bindirs_on_path
 
   local base_list="$DOTFILES/install/packages.txt"
   # The base list is not optional — bootstrapping without it installs NOTHING and still
@@ -687,6 +705,14 @@ provision() {
   verified_install hexyl \
     "https://github.com/sharkdp/hexyl/releases/download/v${HEXYL_VERSION}/hexyl-v${HEXYL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
     "$HEXYL_SHA256"
+
+  # Re-run the PATH prelude, HERE — immediately after the verified_install block and
+  # BEFORE the first probe that depends on it. ~/.cargo/bin may have come into existence
+  # during this run, and this is the last point at which adding it is still ahead of every
+  # `command -v` below (`uv` for the ty route, `atuin` for the daemon unit). Placing it
+  # after those probes would have left the first run on a fresh box taking the wrong branch
+  # on both. Idempotent by construction.
+  blib_user_bindirs_on_path
 
   # ty — Astral's type checker. Prefer `uv tool install` (uv verifies its own downloads
   # and keeps ty upgradable in place); fall back to the pinned asset when uv is absent.
