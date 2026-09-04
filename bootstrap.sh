@@ -561,8 +561,15 @@ provision() {
   # their own copy of this and a third had none at all, which is how the same defect
   # shipped live to openSUSE (dotgibson/dotfiles-core#748).
   #
-  # It adds only directories that EXIST, so it is called AGAIN below, after the
-  # verified_install block has created ~/.local/bin. Idempotent by construction.
+  # `mkdir -p` FIRST, and that line is load-bearing rather than tidy. The helper adds only
+  # directories that EXIST — deliberately, so it cannot inject a bogus PATH entry — but the
+  # `export PATH=` this replaces added ~/.local/bin unconditionally. On a fresh box that
+  # directory does not exist yet, so a straight swap would silently DROP it from PATH for
+  # the whole first run, and the `command -v uv` / `command -v atuin` probes further down
+  # would miss binaries verified_install had just written there: no `ty`, no atuin daemon
+  # unit, on exactly the boxes this script is for. Creating the directory we are about to
+  # install into is a statement of intent, not a guess.
+  mkdir -p "$HOME/.local/bin" 2>/dev/null || true
   blib_user_bindirs_on_path
 
   local base_list="$DOTFILES/install/packages.txt"
@@ -699,6 +706,14 @@ provision() {
     "https://github.com/sharkdp/hexyl/releases/download/v${HEXYL_VERSION}/hexyl-v${HEXYL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
     "$HEXYL_SHA256"
 
+  # Re-run the PATH prelude, HERE — immediately after the verified_install block and
+  # BEFORE the first probe that depends on it. ~/.cargo/bin may have come into existence
+  # during this run, and this is the last point at which adding it is still ahead of every
+  # `command -v` below (`uv` for the ty route, `atuin` for the daemon unit). Placing it
+  # after those probes would have left the first run on a fresh box taking the wrong branch
+  # on both. Idempotent by construction.
+  blib_user_bindirs_on_path
+
   # ty — Astral's type checker. Prefer `uv tool install` (uv verifies its own downloads
   # and keeps ty upgradable in place); fall back to the pinned asset when uv is absent.
   if ! command -v ty >/dev/null 2>&1; then
@@ -743,14 +758,6 @@ provision() {
       fi
     fi
   fi
-
-  # Re-run the PATH prelude. The helper adds only directories that already EXIST, and on
-  # a first run of a fresh box ~/.local/bin did not — verified_install created it a few
-  # dozen lines up, when it wrote mise/atuin/starship into it. Without this second call
-  # every guard from here down is blind to what this script just installed, which is the
-  # probe that shipped a permanently-failing bootstrap to openSUSE
-  # (dotgibson/dotfiles-core#748). Idempotent by construction.
-  blib_user_bindirs_on_path
 
   # ── go-installed tools ──────────────────────────────────────────────────────
   # yq: noble's `yq` is kislyuk's PYTHON yq, and `yq-go` (mikefarah's, the jq-for-YAML

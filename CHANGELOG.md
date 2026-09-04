@@ -95,7 +95,7 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
   "is the tool present afterwards" can never fail under one. Core has shipped
   `blib_user_bindirs_on_path` for exactly this since dotgibson/dotfiles-core#425 — it resolves
   `CARGO_HOME` and `GOBIN`/`GOPATH` rather than hard-coding them, and adds only directories
-  that **exist**, so it is called again after an installer creates one. The literal list was a fork of Core's helper and was missing `GOBIN` — harmless only because this script sets it to `~/.local/bin` itself. A second call now runs after the `verified_install` block, which on a first run is what creates `~/.local/bin`.
+  that **exist**, so it is called again after an installer creates one. The directory this script installs into is `mkdir -p`'d before the helper runs, and the second refresh sits immediately after the `verified_install` block: the helper adds only directories that already **exist**, so a straight swap for the old unconditional `export` would have dropped `~/.local/bin` for the whole first run and made the `command -v uv` (ty route) and `command -v atuin` (daemon unit) probes miss binaries this script had just written. The literal list was a fork of Core's helper and was missing `GOBIN` — harmless only because this script sets it to `~/.local/bin` itself. A second call now runs after the `verified_install` block, which on a first run is what creates `~/.local/bin`.
 - **`make check` was not hermetic, and wrote Core into your real config dir
   (dotgibson/dotfiles-core#852).** The target promises "a hermetic `--links-only` run
   against a throwaway HOME" and redirected only `HOME` — but `bootstrap.sh` resolves its
