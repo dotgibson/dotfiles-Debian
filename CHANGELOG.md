@@ -83,6 +83,19 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Fixed
 
+- **`bootstrap.sh`'s `PATH` is not the shell's `PATH` — adopt `blib_user_bindirs_on_path`**
+  (dotgibson/dotfiles-core#748). Replaces the hand-rolled `export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"` prelude. `~/.local/bin`, `~/.cargo/bin` and `$GOBIN` reach
+  `PATH` only through the zsh layer, i.e. only inside a Core shell — which does not exist
+  while `bootstrap.sh` runs. So every `command -v <tool>` guard here was answered by the
+  PATH of whatever shell launched the bootstrap: on a fresh box, bash, with none of them.
+  That is wasted work when the guard picks whether to reinstall, and a **wrong answer** when
+  it picks a branch — `dotfiles-openSUSE` probed `command -v mise` for a mise `mise.run` had
+  written to `~/.local/bin` moments earlier, both arms of its Go fallback missed, and the run
+  exited 2 on every bootstrap. No stubbed CI leg can see that: a stub installs nothing, so
+  "is the tool present afterwards" can never fail under one. Core has shipped
+  `blib_user_bindirs_on_path` for exactly this since dotgibson/dotfiles-core#425 — it resolves
+  `CARGO_HOME` and `GOBIN`/`GOPATH` rather than hard-coding them, and adds only directories
+  that **exist**, so it is called again after an installer creates one. The directory this script installs into is `mkdir -p`'d before the helper runs, and the second refresh sits immediately after the `verified_install` block: the helper adds only directories that already **exist**, so a straight swap for the old unconditional `export` would have dropped `~/.local/bin` for the whole first run and made the `command -v uv` (ty route) and `command -v atuin` (daemon unit) probes miss binaries this script had just written. The literal list was a fork of Core's helper and was missing `GOBIN` — harmless only because this script sets it to `~/.local/bin` itself. A second call now runs after the `verified_install` block, which on a first run is what creates `~/.local/bin`.
 - **`make check` was not hermetic, and wrote Core into your real config dir
   (dotgibson/dotfiles-core#852).** The target promises "a hermetic `--links-only` run
   against a throwaway HOME" and redirected only `HOME` — but `bootstrap.sh` resolves its
