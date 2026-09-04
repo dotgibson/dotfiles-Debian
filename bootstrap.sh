@@ -552,7 +552,18 @@ provision() {
   # land in ~/.local/bin (and ~/.cargo/bin), which are NOT on PATH during a fresh
   # bootstrap — os/debian.zsh adds them, and that has not been sourced yet. Without this
   # prelude every re-run would redo work it had already done.
-  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  #
+  # Core's helper, NOT the hand-rolled `export PATH=` this used to be. The literal list was
+  # a fork of core/lib/bootstrap-lib.sh :: blib_user_bindirs_on_path, and it was missing
+  # GOBIN — which this script SETS, to ~/.local/bin, so the omission happened to be
+  # harmless here and would stop being so the moment that changed. The helper resolves
+  # CARGO_HOME and GOBIN/GOPATH rather than hard-coding them. Two other repos had grown
+  # their own copy of this and a third had none at all, which is how the same defect
+  # shipped live to openSUSE (dotgibson/dotfiles-core#748).
+  #
+  # It adds only directories that EXIST, so it is called AGAIN below, after the
+  # verified_install block has created ~/.local/bin. Idempotent by construction.
+  blib_user_bindirs_on_path
 
   local base_list="$DOTFILES/install/packages.txt"
   # The base list is not optional — bootstrapping without it installs NOTHING and still
@@ -732,6 +743,14 @@ provision() {
       fi
     fi
   fi
+
+  # Re-run the PATH prelude. The helper adds only directories that already EXIST, and on
+  # a first run of a fresh box ~/.local/bin did not — verified_install created it a few
+  # dozen lines up, when it wrote mise/atuin/starship into it. Without this second call
+  # every guard from here down is blind to what this script just installed, which is the
+  # probe that shipped a permanently-failing bootstrap to openSUSE
+  # (dotgibson/dotfiles-core#748). Idempotent by construction.
+  blib_user_bindirs_on_path
 
   # ── go-installed tools ──────────────────────────────────────────────────────
   # yq: noble's `yq` is kislyuk's PYTHON yq, and `yq-go` (mikefarah's, the jq-for-YAML
