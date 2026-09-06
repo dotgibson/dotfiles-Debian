@@ -233,7 +233,12 @@ jobs:
             fi
           }
           check_floor neovim 0.12 "nvim-treesitter main hard-requires it"
-          check_floor tree-sitter-cli 0.26.1 "core/PORTING-MATRIX.md footnote 5"
+          # NAMED BY ROW, NOT BY FOOTNOTE NUMBER. This said "footnote 5", which is an index
+          # into a file that renumbers whenever a footnote is added above it — and the floor
+          # itself is now rendered into that matrix from the same `# min:` line this notice
+          # tells you to write, so pointing at a number duplicated a provenance that has a
+          # live source (dotfiles-core#836). The row name survives renumbering.
+          check_floor tree-sitter-cli 0.26.1 "core/PORTING-MATRIX.md, tree-sitter-cli row"
 
           [ "$found" -eq 0 ] && echo "nothing to promote on ${{ matrix.label }}."
           exit 0
