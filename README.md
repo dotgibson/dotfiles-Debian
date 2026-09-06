@@ -140,7 +140,7 @@ cd ~/dotfiles-Debian
 exec zsh
 ```
 
-`core/` is a vendored subtree and is **already present** in a clone — there is no
+`core/` is a vendored copy and is **already present** in a clone — there is no
 submodule step. `bootstrap.sh` is idempotent: it provisions `apt` packages, installs
 the pinned upstream assets apt cannot supply, and symlinks Core + the Debian layer
 into place.
