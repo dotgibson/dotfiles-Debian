@@ -177,8 +177,12 @@ unset _IS_WSL
 # powershell/os/30-windows.ps1 psmux auto-launch.
 # Also skip inside an existing tmux, VS Code's integrated terminal, non-TTYs, and when
 # DEBIAN_NO_TMUX is set (scp/rsync and `ssh host <cmd>` are already covered by -t 1).
+# DOTFILES_NO_AUTOTMUX is the fleet-wide spelling of the same opt-out (MacBook, openSUSE and
+# Gentoo read it; Core's README hero render exports it before sourcing this layer from inside
+# vhs, dotgibson/dotfiles-core#877) — honoured alongside, so neither name breaks.
 if command -v tmux >/dev/null 2>&1 \
-   && [[ -z "$TMUX" && -z "${DEBIAN_NO_TMUX:-}" && -z "${SSH_CONNECTION:-}" \
+   && [[ -z "$TMUX" && -z "${DEBIAN_NO_TMUX:-}" && -z "${DOTFILES_NO_AUTOTMUX:-}" \
+         && -z "${SSH_CONNECTION:-}" \
          && -t 1 && "$TERM_PROGRAM" != "vscode" ]]; then
   tmux attach -t main 2>/dev/null || tmux new-session -s main
 fi
