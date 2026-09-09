@@ -14,6 +14,15 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Added
 
+- **The README opens with a rendered terminal hero** (dotgibson/dotfiles-core#948).
+  `assets/demo.gif` is filmed from `assets/demo.tape`, which dotfiles-core generates from
+  one shared template for all nine OS and role repos — the same tour everywhere, plus the
+  one command that is this repo's own: `up -n` resolving to `sudo apt-get full-upgrade`.
+  The tape is generated (edit dotfiles-core's `assets/hero.tape.in`, not the tape);
+  re-render with `vhs assets/demo.tape` on a Debian box after a prompt or tooling change,
+  then `gifsicle -O3 --lossy=80 --colors 64` — the raw render is over Core's 2 MiB
+  ceiling, the optimised one is not.
+
 - **`make test` and `make core-verify`** — the two canonical fleet verbs this repo was
   missing (dotgibson/dotfiles-core#691, reported by dotgibson/dotfiles-core#846's
   register). Core now declares one `make` vocabulary for every repo that vendors it —
