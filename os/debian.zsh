@@ -115,21 +115,10 @@ fi
 # shelf boxes, since dotfiles-Offense stacks its Role layer on one. None of this is
 # Kali-specific though — it applies to any Debian-family distro under WSL.
 #
-# Detection is deliberately fork-free: WSL_DISTRO_NAME is set by WSL itself, and
-# the /proc/version fallback is read with zsh's $(<file) rather than grep, because
-# this runs on every interactive shell and Core's bench job holds startup to a
-# 120ms budget. (bootstrap.sh uses Core's blib_is_wsl for the same test in bash,
-# where the grep is fine — it runs once.)
-_IS_WSL=0
-if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-  _IS_WSL=1
-elif [[ -r /proc/version ]]; then
-  _pv="$(</proc/version)"; _pv=${_pv:l}
-  [[ "$_pv" == *microsoft* || "$_pv" == *wsl* ]] && _IS_WSL=1
-  unset _pv
-fi
-
-if (( _IS_WSL )); then
+# Detection is Core's: _core_is_wsl (core/zsh/00-tools.zsh) is the fleet's only WSL
+# predicate — fork-free, memoised after the first call, and kept callable for band 80.
+# (bootstrap.sh uses the bash sibling, blib_is_wsl.)
+if _core_is_wsl; then
   alias open='explorer.exe'
   command -v wslview >/dev/null && alias xdg-open='wslview'
 
@@ -163,8 +152,6 @@ if (( _IS_WSL )); then
     fi
   }
 fi
-
-unset _IS_WSL
 
 # ── auto-start/attach tmux for interactive terminals ─────────────────────────
 # Land straight in a persistent `main` session for LOCAL interactive logins (a WSL
