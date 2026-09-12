@@ -50,6 +50,9 @@ The Debian-family LSM, and the analog of Fedora's SELinux helpers.
 | `localip` | `ip -brief -4 addr show scope global` |
 | `opsignin` | `eval "$(op signin)"` (only if `op` is installed) |
 | `pbcopy` / `pbpaste` | Core's `clip` / `clip-paste` — **inert headless**, see README |
+| `open` | `explorer.exe` (WSL2 only) |
+| `xdg-open` | `wslview` (WSL2 only, and only if `wslview` is installed) |
+| `cdwin` | Jump to the Windows user profile — resolved on first use, memoised in `$WINHOME`, falls back to `/mnt/c/Users/$USER` (WSL2 only; a function, not an alias) |
 
 ## Not aliased here
 

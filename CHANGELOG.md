@@ -14,6 +14,15 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Added
 
+- **The README opens with a rendered terminal hero** (dotgibson/dotfiles-core#948).
+  `assets/demo.gif` is filmed from `assets/demo.tape`, which dotfiles-core generates from
+  one shared template for all nine OS and role repos — the same tour everywhere, plus the
+  one command that is this repo's own: `up -n` resolving to `sudo apt-get full-upgrade`.
+  The tape is generated (edit dotfiles-core's `assets/hero.tape.in`, not the tape);
+  re-render with `vhs assets/demo.tape` on a Debian box after a prompt or tooling change,
+  then `gifsicle -O3 --lossy=80 --colors 64` — the raw render is over Core's 2 MiB
+  ceiling, the optimised one is not.
+
 - **`make test` and `make core-verify`** — the two canonical fleet verbs this repo was
   missing (dotgibson/dotfiles-core#691, reported by dotgibson/dotfiles-core#846's
   register). Core now declares one `make` vocabulary for every repo that vendors it —
@@ -82,6 +91,14 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
   lane; vendor-signed apt repos (Charm, 1Password) are used instead.
 
 ### Fixed
+
+- **The tmux auto-attach honours `DOTFILES_NO_AUTOTMUX`, the fleet's one opt-out name**
+  (dotgibson/dotfiles-core#877). MacBook, openSUSE and Gentoo already read it; this layer
+  attached unconditionally for any interactive TTY, which is how dotfiles-core's README hero
+  render — a vhs session that sources this layer — typed its whole tour into a fresh `main`
+  session. Core's `gen-hero-tape.sh` now refuses to render a hero on a layer that does not
+  honour the knob. Export `DOTFILES_NO_AUTOTMUX=1` for any harness that drives an interactive
+  zsh and must not land in tmux. `DEBIAN_NO_TMUX` keeps working alongside it.
 
 - **`make markdown` probed for a global, unpinned `markdownlint-cli2` — so on a normal box it
   never linted anything** (dotgibson/dotfiles-core#873). Nothing in this repo's bootstrap
