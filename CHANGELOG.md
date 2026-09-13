@@ -73,6 +73,21 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
   plain `.gz` (tree-sitter) and `.zip` (procs) — and takes an optional inner-binary
   name for assets whose executable is named differently from the command.
 
+### Changed
+
+- **`bootstrap.sh` runs on Core's escalation, sudo-keepalive and failure-tally helpers
+  instead of private copies** (dotgibson/dotfiles-core#867). `blib_resolve_su` replaces the
+  hand-rolled root/sudo/doas probe — the same `$EUID` string compare, plus an absolute path
+  for the escalator, and `--require` only when packages will actually be installed, so
+  `--dry-run` no longer demands one. `blib_sudo_keepalive_start` / `_stop` replace the
+  private refresher loop and its trap. `note_fail` is now a one-line shim over
+  `blib_note_fail`, and the closing report comes from `blib_failures_report` — which means
+  the failures the shared lib records **itself** (the tpm clone, `blib_install_system_file`)
+  finally appear in it instead of being dropped. Output and `--strict` semantics are
+  unchanged; the one visible difference is that hint lines print the escalator's full path
+  (`/usr/bin/sudo apt-get purge …`). Closes this repo's four rows in Core's `audit-core.sh` §5f
+  ledger, which had read 1/9 (Gentoo only) since dotgibson/dotfiles-core#748.
+
 ### Notes on what is deliberately absent
 
 - `neovim` and `tree-sitter-cli` are **not** in `install/packages.txt`. Ubuntu 24.04
