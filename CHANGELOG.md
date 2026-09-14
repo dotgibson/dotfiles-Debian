@@ -75,6 +75,20 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Changed
 
+- **`bootstrap.sh` runs on Core's bootstrap driver, `blib_main`** (dotgibson/dotfiles-core#986).
+  The shared half — the flag loop, the escalator, the sudo keepalive, the Core symlink
+  surface, the OS overlays, the managed `~/.zshrc`, the login shell, the closing report — now
+  runs from one definition in `core/lib/bootstrap-lib.sh` (vendored since v7.4.0). This file
+  declares what it is (`BOOTSTRAP_OS=debian`) and keeps only what is Debian's: the
+  three-distro OS guard and preflight as `bootstrap_guard`, the apt provisioning with its
+  tiered package list and pinned out-of-band installs as `bootstrap_provision` (body
+  unchanged), the dry-run preview as `bootstrap_check`, the distro tier's capability re-link
+  as `bootstrap_wire_pre_loader` (the slot exists for exactly this: it must land before the
+  managed `~/.zshrc` is written), the shadowed-tools report as `bootstrap_closing`, and
+  `--no-upgrade` / `--no-unattended` / `--force-os` through `bootstrap_flag`. 962 → 876
+  lines. One convention change: an unknown flag exits **2** (usage error), not 1, which stays
+  for real failures. Same links, same loader, same exit codes otherwise.
+
 - **`make check` runs Core's vendored `check-links.sh` instead of its own copy of the
   hermetic `--links-only` gate** (dotgibson/dotfiles-core#975, #852). The recipe carried one
   of four near-identical copies of that block across the fleet, and they drifted the way copies
