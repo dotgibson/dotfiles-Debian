@@ -1,90 +1,28 @@
 #!/usr/bin/env bash
 # dotfiles-Debian/bootstrap.sh
 # ──────────────────────────────────────────────────────────────────────────────
-# Provision a Debian-family box (targets Ubuntu 24.04 LTS) and wire up dotfiles.
-# Idempotent — safe to re-run. This is the OS-NATIVE layer; Core (zsh/tmux/nvim/git)
-# is vendored under core/ and symlinked in via the shared core/lib/bootstrap-lib.sh.
+# Provision a Debian-family box (Ubuntu 24.04 LTS, Debian, Kali — desktop, server or WSL)
+# and wire up dotfiles. Idempotent — safe to re-run. This is the OS-NATIVE layer; Core
+# (zsh/tmux/nvim/git) is vendored under core/ and symlinked in via core/lib/bootstrap-lib.sh.
 #
-# WHY THIS REPO CARRIES SO MANY OUT-OF-BAND INSTALLS
-#   Every other Linux repo in the fleet targets a rolling or near-rolling distro.
-#   Ubuntu 24.04 froze in April 2024, so a large slice of the modern-CLI stack is
-#   either absent from `noble` or too old to satisfy Core — most sharply neovim
-#   (noble has 0.9.5; core/nvim's pinned nvim-treesitter main branch hard-requires
-#   0.12) and tree-sitter-cli (noble has 0.20.8; the floor is 0.26.1). That is a
-#   property of the release date, not of the design. install/packages.txt carries
-#   only what apt can actually satisfy; everything else arrives here as a pinned,
-#   SHA-256-verified release asset. See install/tool-versions.env.
-#
-# Run `./bootstrap.sh --help` for the flag list (usage() below is the one definition —
-# do NOT re-add a `sed -n 'N,Mp' "$0"` help, which silently drifts when this header moves;
-# core/scripts/sync-core.sh documents that exact trap).
+# THE DRIVER FORM (dotgibson/dotfiles-core#976, #986). The shared half of a bootstrap — the
+# flags, the escalator, the sudo keepalive, the Core symlink surface, the OS overlays, the
+# managed ~/.zshrc loader, the login shell, the closing report — is core/lib/bootstrap-lib.sh
+# :: blib_main, ONE definition instead of a copy per repo. This file declares what it is,
+# defines the hooks that are genuinely Debian's (the OS guard + preflight, the apt
+# provisioning with its tiered package list and pinned out-of-band installs, the dry-run
+# preview, the distro-tier capability re-link, the shadowed-tools report, the repo flags),
+# and hands over. `--help` prints both halves; the driver's flags are documented at the driver.
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Read by blib_main in the sourced lib (shellcheck does not follow into it).
+# shellcheck disable=SC2034
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
-LINKS_ONLY=0
 DO_UPGRADE=1
 DO_UNATTENDED=1
-STRICT=0
 FORCE_OS=0
-# --only/--skip are validated by the shared lib (blib_select), which is sourced
-# AFTER this loop — so capture the raw values now and apply them below.
-ONLY_RAW="" SKIP_RAW="" ONLY_SEEN=0 SKIP_SEEN=0
-
-# usage() is a real heredoc, NOT `sed -n '2,17p' "$0"`. The old form was coupled to this
-# file's header line numbers, so editing the banner above silently drifted `--help` — the
-# trap core/scripts/sync-core.sh calls out by name. This stays correct however the header moves.
-usage() {
-  cat <<'EOF'
-bootstrap.sh — provision a Debian-family box (Ubuntu 24.04 LTS) and wire up dotfiles.
-Idempotent: safe to re-run.
-
-  ./bootstrap.sh                  full: apt packages + pinned extras + symlinks
-  ./bootstrap.sh --links-only     just (re)create symlinks (no apt, no downloads)
-  ./bootstrap.sh --dry-run        preview EVERYTHING; change nothing
-  ./bootstrap.sh --no-upgrade     apt update, but skip the full-upgrade
-  ./bootstrap.sh --no-unattended  don't configure unattended-upgrades
-  ./bootstrap.sh --only zsh,nvim  link ONLY these Core module groups
-  ./bootstrap.sh --skip tmux      link everything EXCEPT these groups
-  ./bootstrap.sh --strict         exit non-zero if any best-effort step failed
-  ./bootstrap.sh --force-os       run on a Debian-LIKE distro (Mint, Pop!_OS, Raspbian)
-  ./bootstrap.sh -h, --help       show this help and exit
-
-Module groups (for --only/--skip): zsh nvim tmux git prompt tools — they affect the
-wiring steps only, never package provisioning; combine with --links-only to re-wire a
-subset of configs without touching apt.
-
-Env:
-  BLIB_SU   privilege escalator; auto-resolved (empty as root, else sudo, else doas).
-            Set explicitly to override, e.g. BLIB_SU=doas or BLIB_SU= to run as root.
-EOF
-}
-
-while [[ $# -gt 0 ]]; do case "$1" in
-  --links-only) LINKS_ONLY=1 ;;
-  --no-upgrade) DO_UPGRADE=0 ;;
-  --no-unattended) DO_UNATTENDED=0 ;;
-  --dry-run | -n) BLIB_DRY=1 ;;
-  --strict) STRICT=1 ;;
-  --force-os) FORCE_OS=1 ;;
-  --only) [[ $# -ge 2 ]] || { echo "--only requires module names, e.g. --only zsh,nvim" >&2; exit 1; }; ONLY_RAW="$2"; ONLY_SEEN=1; shift ;;
-  --only=*) ONLY_RAW="${1#*=}"; ONLY_SEEN=1 ;;
-  --skip) [[ $# -ge 2 ]] || { echo "--skip requires module names, e.g. --skip tmux" >&2; exit 1; }; SKIP_RAW="$2"; SKIP_SEEN=1; shift ;;
-  --skip=*) SKIP_RAW="${1#*=}"; SKIP_SEEN=1 ;;
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  *)
-    echo "unknown arg: $1" >&2
-    usage >&2
-    exit 1
-    ;;
-  esac; shift; done
-# BLIB_DRY is read by the shared lib's mutating helpers via ${BLIB_DRY:-0} at CALL time,
-# so setting it here (before the lib is sourced) is enough. Default it so `set -u` is safe.
-: "${BLIB_DRY:=0}"
 
 # ── core/ subtree present? (inline: can't source a lib out of core/ before this) ─
 # Validate the SPECIFIC paths we depend on (zsh modules + the two libs sourced
@@ -119,10 +57,39 @@ source "$DOTFILES/scripts/pkg-filter.sh"
 # shellcheck source=scripts/tool-floor.sh
 source "$DOTFILES/scripts/tool-floor.sh"
 
-# Apply any --only/--skip module selection now the validator (blib_select) exists;
-# it aborts on a malformed selector or an unknown group.
-if ((ONLY_SEEN)); then blib_select --only "$ONLY_RAW"; fi
-if ((SKIP_SEEN)); then blib_select --skip "$SKIP_RAW"; fi
+
+# ── what this repo is (read by blib_main) ─────────────────────────────────────
+# shellcheck disable=SC2034
+BOOTSTRAP_NAME="Debian"
+# shellcheck disable=SC2034
+BOOTSTRAP_OS=debian # → blib_link_os_layer: os/debian.{zsh,conf,gitconfig,capabilities}
+
+# ── hooks (called by blib_main, in its order; shellcheck cannot see that) ─────
+# shellcheck disable=SC2329
+bootstrap_usage() {
+  cat <<'EOF'
+bootstrap.sh — provision a Debian-family box (Ubuntu 24.04 LTS) and wire up dotfiles.
+Idempotent: safe to re-run.
+
+  ./bootstrap.sh --no-upgrade     apt update, but skip the full-upgrade
+  ./bootstrap.sh --no-unattended  don't configure unattended-upgrades
+  ./bootstrap.sh --force-os       run on a Debian-LIKE distro (Mint, Pop!_OS, Raspbian)
+
+Env:
+  BLIB_SU   privilege escalator; auto-resolved (empty as root, else sudo, else doas).
+            Set explicitly to override, e.g. BLIB_SU=doas or BLIB_SU= to run as root.
+EOF
+}
+# shellcheck disable=SC2329
+bootstrap_flag() {
+  case "$1" in
+  --no-upgrade) DO_UPGRADE=0 ;;
+  --no-unattended) DO_UNATTENDED=0 ;;
+  --force-os) FORCE_OS=1 ;;
+  *) return 1 ;;
+  esac
+  return 0
+}
 
 # ── deferred failures ─────────────────────────────────────────────────────────
 # Many steps below are deliberately best-effort (`|| true` / a warning): a rate-limited
@@ -148,7 +115,7 @@ note_shadow() {
   blib_warn "$1"
 }
 
-# ── sanity: confirm we're on a Debian-family box ──────────────────────────────
+# ── the OS guard + preflight, as ONE hook: refuse the wrong box before anything runs ──
 # Parse the ID= / ID_LIKE= KEYS rather than grepping the whole file for "debian": a bare
 # `grep -qi debian /etc/os-release` matches any incidental substring (a HOME_URL, a
 # PRETTY_NAME) and would sail a wholly unrelated distro past the guard.
@@ -173,41 +140,26 @@ _osr_field() { # <KEY> — the unquoted value of KEY in /etc/os-release ("" when
 }
 OS_ID="$(_osr_field ID)"
 OS_ID_LIKE="$(_osr_field ID_LIKE)"
-if [[ "$OS_ID" != ubuntu && "$OS_ID" != debian && "$OS_ID" != kali ]]; then
-  if [[ " $OS_ID_LIKE " == *" debian "* ]]; then
-    if ((FORCE_OS)); then
-      blib_warn "ID=$OS_ID is only debian-LIKE — continuing under --force-os; package names may differ"
+os_guard() {
+  if [[ "$OS_ID" != ubuntu && "$OS_ID" != debian && "$OS_ID" != kali ]]; then
+    if [[ " $OS_ID_LIKE " == *" debian "* ]]; then
+      if ((FORCE_OS)); then
+        blib_warn "ID=$OS_ID is only debian-LIKE — continuing under --force-os; package names may differ"
+      else
+        echo "This bootstrap targets Ubuntu (ID=ubuntu), Debian (ID=debian) or Kali (ID=kali); this box reports ID=$OS_ID (ID_LIKE=$OS_ID_LIKE)." >&2
+        echo "Package availability differs there. Re-run with --force-os to proceed anyway." >&2
+        exit 1
+      fi
     else
-      echo "This bootstrap targets Ubuntu (ID=ubuntu), Debian (ID=debian) or Kali (ID=kali); this box reports ID=$OS_ID (ID_LIKE=$OS_ID_LIKE)." >&2
-      echo "Package availability differs there. Re-run with --force-os to proceed anyway." >&2
+      echo "This bootstrap targets Debian-family distros. /etc/os-release reports ID=${OS_ID:-<none>}." >&2
       exit 1
     fi
-  else
-    echo "This bootstrap targets Debian-family distros. /etc/os-release reports ID=${OS_ID:-<none>}." >&2
-    exit 1
   fi
-fi
+}
 
-# ── privilege escalation ──────────────────────────────────────────────────────
-# Resolve the escalator ONCE, the way the shared lib expects (it reads $BLIB_SU, defaulting
-# to `sudo` only when the var is UNSET — so an explicit empty value means "run directly").
-#
-# Deliberately NOT a hardcoded `sudo` (which is what dotfiles-Offense did before it shed
-# its OS-native half to this repo): there is no sudo
-# to call inside an `ubuntu:24.04` container, which is exactly where the reusable CI
-# bootstrap test runs. Resolving here keeps our escalations in step with the lib's own
-# (blib_set_login_shell).
-# blib_resolve_su, not a hand-rolled probe: it decides "root" from $EUID (a STRING compare,
-# so a missing `id` cannot read as root), pins the ABSOLUTE path of sudo or doas, and
-# honours an explicit BLIB_SU= from the caller (CI's --links-only leg). --require only when
-# packages will actually be installed: wiring symlinks and a dry run need no privileges.
-if ((LINKS_ONLY)) || ((BLIB_DRY)); then
-  blib_resolve_su || true
-else
-  blib_resolve_su --require || exit 1
-fi
-# priv <cmd...> — run CMD under the resolved escalator, or directly when we are already
-# root. Never invokes an empty-string command (which would be a "" not found error).
+
+# priv <cmd...> — run CMD under the escalator blib_main resolved (BLIB_SU: an absolute path,
+# or empty when root). Never invokes an empty-string command.
 priv() {
   if [[ -n "$BLIB_SU" ]]; then "$BLIB_SU" "$@"; else "$@"; fi
 }
@@ -266,7 +218,7 @@ preflight_cmds() {
   # --links-only has NO hard requirements: wiring is pure shell plus coreutils. Notably it
   # must not demand git — the reusable CI test provisions only `bash zsh` and pre-seeds the
   # tpm dir precisely so the wiring path stays offline and deterministic.
-  ((LINKS_ONLY)) || need=(apt-get dpkg curl sed awk tar)
+  ((BLIB_LINKS_ONLY)) || need=(apt-get dpkg curl sed awk tar)
   local c
   for c in "${need[@]}"; do
     command -v "$c" >/dev/null 2>&1 || missing+=("$c")
@@ -283,13 +235,11 @@ preflight_cmds() {
     blib_warn "git is not installed — the one-time tpm clone will be skipped; install git, then re-run with --links-only (or clone tpm by hand and press prefix + I)"
   fi
 }
-preflight_cmds
-
-# ── keep the sudo timestamp warm for the whole run ────────────────────────────
-# Core's blib_sudo_keepalive_start / _stop (core/lib/bootstrap-lib.sh): prime sudo ONCE up
-# front with the prompt visible, then refresh it in the background so no later call can
-# stop the run dead at an INVISIBLE prompt after a minutes-long download. Started inside
-# provision(), which owns the EXIT trap that stops it. A no-op for doas and for root.
+# shellcheck disable=SC2329
+bootstrap_guard() {
+  os_guard
+  preflight_cmds
+}
 
 # ── pinned + verified installs ────────────────────────────────────────────────
 # The tools apt cannot supply arrive as VERIFIED release assets, never `curl … | sh`.
@@ -506,7 +456,40 @@ _dotfiles_go_install() { # <import-path@version> <binary-name>
     note_fail "$2: go install failed — SKIPPED"
 }
 
-provision() {
+# A dry run must preview provisioning too, not silently skip half the script. The driver
+# never fakes bootstrap_provision under --dry-run; this report-only hook (it runs unless
+# --links-only) prints the plan instead and does nothing on a real run.
+# shellcheck disable=SC2329
+bootstrap_check() {
+  [[ "${BLIB_DRY:-0}" != 0 ]] || return 0 # unset on a real run under set -u; the lib reads it the same way
+  [[ "$OS_ID" == ubuntu ]] && blib_say "would ensure the 'universe' component is enabled"
+  blib_say "would apt update$( ((DO_UPGRADE)) && printf ' + full-upgrade')"
+  if [[ -f "$DOTFILES/install/packages.txt" ]]; then
+    _dry_pkgs=()
+    mapfile -t _dry_pkgs < <(blib_read_pkgs <(pkg_filter_lines "$DOTFILES/install/packages.txt" "$OS_ID"))
+    blib_say "would apt install ${#_dry_pkgs[@]} packages: ${_dry_pkgs[*]}"
+    unset _dry_pkgs
+  else
+    blib_warn "install/packages.txt is missing — a real run would abort here"
+  fi
+  # Through have_current_tool, not a bare `command -v` — otherwise a preview on a box
+  # carrying a too-old apt build reports nothing at all about the tool that is about to
+  # be replaced, which is the very blind spot this guard exists to close.
+  for _t in "${OUT_OF_BAND_TOOLS[@]}"; do
+    have_current_tool "$_t" || blib_say "would install (out of band): $_t"
+  done
+  unset _t
+  ((DO_UNATTENDED)) && blib_say "would configure unattended-upgrades (security pocket)"
+  # The distro tier and the WSL step are both conditional, so a preview that omitted
+  # them would under-report on exactly the boxes where they matter.
+  blib_say "distro tier in effect: ID=${OS_ID:-unknown}"
+  if blib_is_wsl; then
+    blib_say "would write /etc/wsl.conf (systemd + default user=$(id -un) + interop)"
+    blib_say "would note: inbound listeners need mirrored networking (wsl/windows.wslconfig.example)"
+  fi
+}
+
+bootstrap_provision() {
   # ── PATH: make the presence guards below tell the TRUTH ─────────────────────
   # Every `command -v <tool>` guard decides whether to spend time downloading. Installs
   # land in ~/.local/bin (and ~/.cargo/bin), which are NOT on PATH during a fresh
@@ -846,11 +829,10 @@ provision() {
   fi
 }
 
-wire_links() {
-  # The shared symlink surface + the Debian OS overlays + the managed .zshrc
-  # loader + the default-login-shell switch all live in core/lib/bootstrap-lib.sh.
-  blib_link_core "$DOTFILES" "$CONFIG"
-  blib_link_os_layer "$DOTFILES" "$CONFIG" debian
+# The distro tier's capability declaration, re-linked over the one blib_link_os_layer just
+# wired and BEFORE the managed ~/.zshrc is written — the pre-loader slot exists for this.
+# shellcheck disable=SC2329
+bootstrap_wire_pre_loader() {
   # ── the capability declaration's TIER ────────────────────────────────────────
   # blib_link_os_layer has just linked os/debian.capabilities, which is noble's and
   # trixie's. This repo targets three distros, and one key cannot be shared: Kali must
@@ -868,95 +850,27 @@ wire_links() {
     blib_say "$OS_ID tier — using os/debian.$OS_ID.capabilities for the capability declaration"
     blib_link "$DOTFILES/os/debian.$OS_ID.capabilities" "$CONFIG/zsh/os.capabilities"
   fi
-  # shellcheck disable=SC2119  # no args is intentional — writes the default module set
-  blib_write_zshrc_loader
-  blib_set_login_shell
-  # Install the local pre-commit guard that refuses hand-edits to the vendored core/
-  # subtree. .git/hooks is NOT version-controlled, so a fresh clone has none. The
-  # PR-time core-integrity workflow is the durable backstop, but this catches the edit
-  # before it is ever committed.
-  #
-  # Dry-run guarded at the CALL SITE on purpose: blib_install_core_guard writes
-  # .git/hooks/pre-commit unconditionally (it predates BLIB_DRY and does not consult it),
-  # so calling it under --dry-run would mutate the repo during a run that promises not to.
-  if ((BLIB_DRY)); then
-    blib_say "would install the core/ pre-commit guard in $DOTFILES"
-  else
-    blib_install_core_guard "$DOTFILES" || true
-  fi
-  blib_ok "symlinks wired$(blib_selected_note)"
 }
 
-# ── run ───────────────────────────────────────────────────────────────────────
-if ((BLIB_DRY)); then
-  blib_say "DRY RUN — nothing below is executed or written"
-fi
-
-if ((LINKS_ONLY)); then
-  :
-elif ((BLIB_DRY)); then
-  # A dry run must preview provisioning too, not silently skip half the script. Print the
-  # plan (what apt would be asked for, which extras are missing) without touching anything.
-  [[ "$OS_ID" == ubuntu ]] && blib_say "would ensure the 'universe' component is enabled"
-  blib_say "would apt update$( ((DO_UPGRADE)) && printf ' + full-upgrade')"
-  if [[ -f "$DOTFILES/install/packages.txt" ]]; then
-    _dry_pkgs=()
-    mapfile -t _dry_pkgs < <(blib_read_pkgs <(pkg_filter_lines "$DOTFILES/install/packages.txt" "$OS_ID"))
-    blib_say "would apt install ${#_dry_pkgs[@]} packages: ${_dry_pkgs[*]}"
-    unset _dry_pkgs
-  else
-    blib_warn "install/packages.txt is missing — a real run would abort here"
+# What only this repo knows at the end: the shadowed-tools report, printed BEFORE the
+# failure tally and separately from it (nothing failed here).
+# shellcheck disable=SC2329
+bootstrap_closing() {
+  # Reported BEFORE the failures and separately from them: nothing failed here — the
+  # pinned build installed and, because ~/.local/bin precedes /usr/bin, the shell resolves
+  # the right one. What is left is a stale apt package that will answer the presence guard
+  # on every future run, which is exactly how the silent version of this bug survived.
+  if ((${#SHADOWED_TOOLS[@]})); then
+    printf '\n%s%s%s %s\n' "${UX_YEL:-}" "${UX_WARN:-!}" "${UX_RST:-}" \
+      "${#SHADOWED_TOOLS[@]} tool(s) are installed from apt BELOW the floor Core needs:"
+    printf '    - %s\n' "${SHADOWED_TOOLS[@]}"
+    printf '    %s\n' \
+      "The pinned build in ~/.local/bin shadows each of these, so the shell is correct." \
+      "Purge the apt package anyway — otherwise it keeps satisfying the presence guard," \
+      "and any PATH that does not put ~/.local/bin first gets the old binary."
+    echo
   fi
-  # Through have_current_tool, not a bare `command -v` — otherwise a preview on a box
-  # carrying a too-old apt build reports nothing at all about the tool that is about to
-  # be replaced, which is the very blind spot this guard exists to close.
-  for _t in "${OUT_OF_BAND_TOOLS[@]}"; do
-    have_current_tool "$_t" || blib_say "would install (out of band): $_t"
-  done
-  unset _t
-  ((DO_UNATTENDED)) && blib_say "would configure unattended-upgrades (security pocket)"
-  # The distro tier and the WSL step are both conditional, so a preview that omitted
-  # them would under-report on exactly the boxes where they matter.
-  blib_say "distro tier in effect: ID=${OS_ID:-unknown}"
-  if blib_is_wsl; then
-    blib_say "would write /etc/wsl.conf (systemd + default user=$(id -un) + interop)"
-    blib_say "would note: inbound listeners need mirrored networking (wsl/windows.wslconfig.example)"
-  fi
-else
-  provision
-  blib_sudo_keepalive_stop
-fi
+  return 0
+}
 
-wire_links
-blib_wire_summary
-
-# ── closing report ────────────────────────────────────────────────────────────
-# Say plainly what did NOT work. A script that prints "complete" and exits 0 no matter
-# how many best-effort steps failed makes a half-provisioned box look identical to a
-# good one — and on a frozen archive, best-effort steps DO fail.
-# Reported BEFORE the failures and separately from them: nothing failed here — the
-# pinned build installed and, because ~/.local/bin precedes /usr/bin, the shell resolves
-# the right one. What is left is a stale apt package that will answer the presence guard
-# on every future run, which is exactly how the silent version of this bug survived.
-if ((${#SHADOWED_TOOLS[@]})); then
-  printf '\n%s%s%s %s\n' "${UX_YEL:-}" "${UX_WARN:-!}" "${UX_RST:-}" \
-    "${#SHADOWED_TOOLS[@]} tool(s) are installed from apt BELOW the floor Core needs:"
-  printf '    - %s\n' "${SHADOWED_TOOLS[@]}"
-  printf '    %s\n' \
-    "The pinned build in ~/.local/bin shadows each of these, so the shell is correct." \
-    "Purge the apt package anyway — otherwise it keeps satisfying the presence guard," \
-    "and any PATH that does not put ~/.local/bin first gets the old binary."
-  echo
-fi
-
-# blib_failures_report prints the tally (its own and ours, via note_fail) and returns
-# non-zero when anything was recorded; --strict decides whether that is the exit code.
-if ! blib_failures_report; then
-  if ((STRICT)); then
-    blib_warn "exiting non-zero (--strict)"
-    exit 1
-  fi
-  blib_ok "Debian bootstrap finished WITH the warnings above — open a new shell or: exec zsh"
-else
-  blib_ok "Debian bootstrap complete — open a new shell or: exec zsh"
-fi
+blib_main "$@"
