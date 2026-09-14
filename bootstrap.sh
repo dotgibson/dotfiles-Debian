@@ -461,7 +461,7 @@ _dotfiles_go_install() { # <import-path@version> <binary-name>
 # --links-only) prints the plan instead and does nothing on a real run.
 # shellcheck disable=SC2329
 bootstrap_check() {
-  ((BLIB_DRY)) || return 0
+  [[ "${BLIB_DRY:-0}" != 0 ]] || return 0 # unset on a real run under set -u; the lib reads it the same way
   [[ "$OS_ID" == ubuntu ]] && blib_say "would ensure the 'universe' component is enabled"
   blib_say "would apt update$( ((DO_UPGRADE)) && printf ' + full-upgrade')"
   if [[ -f "$DOTFILES/install/packages.txt" ]]; then
