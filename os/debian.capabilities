@@ -43,6 +43,12 @@ PKG_OWNS=dpkg -S
 # which is what makes it safe to run from a once-a-day background nudge.
 PKG_COUNT_PENDING=apt-get -s upgrade
 
+# ── what --packages must not nag about (#1087) ────────────────────────────────
+# All three are base-system on any Debian box and none is in packages.txt, which lists
+# what this repo ADDS. Debian warned the loudest of the fleet without this — ten verbs,
+# because the verbs split across three binaries rather than one.
+PKG_UNLISTED_TOOLS=apt-get apt-cache dpkg
+
 # ── scheduler (required) ──────────────────────────────────────────────────────
 SCHEDULER=systemd
 SCHEDULER_UNIT_DIR=~/.config/systemd/user
