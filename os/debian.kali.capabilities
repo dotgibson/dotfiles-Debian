@@ -44,6 +44,11 @@ PKG_OWNS=dpkg -S
 # which is what makes it safe to run from a once-a-day background nudge.
 PKG_COUNT_PENDING=apt-get -s upgrade
 
+# ── what --packages must not nag about (#1087) ────────────────────────────────
+# Identical to the Debian declaration's, and for the identical reason: Kali is Debian
+# underneath, so the same three base-system binaries carry the verbs.
+PKG_UNLISTED_TOOLS=apt-get apt-cache dpkg
+
 # ── scheduler (required) ──────────────────────────────────────────────────────
 SCHEDULER=systemd
 SCHEDULER_UNIT_DIR=~/.config/systemd/user
