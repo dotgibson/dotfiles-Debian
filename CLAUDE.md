@@ -8,8 +8,8 @@ vendors only what a machine actually runs.
 
 ## What this repo is
 
-`dotfiles-Debian` is the **OS-native layer for the Debian family** in an
-**eleven-repo dotfiles system** built on a three-layer model (Core → OS-native →
+`dotfiles-Debian` is the **OS-native layer for the Debian family** in a
+**twelve-repo dotfiles system** built on a three-layer model (Core → OS-native →
 Role). Structurally it is stamped from the Fedora template (see
 `core/PORTING-MATRIX.md`); its apt idioms came from `dotfiles-Offense` (formerly
 `dotfiles-Kali`), which has since handed its whole OS-native layer over to this
