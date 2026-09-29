@@ -56,6 +56,8 @@ tealdeer               # tldr client — binary: tldr
 duf                    # df — disk usage/free
 sd                     # find & replace — note Fedora RETIRED this; noble still ships it
 gron                   # greppable JSON — likewise dropped on Fedora, present here
+jc                     # command output -> JSON (ps, dig, ls, ...). Universe on noble,
+                       # main on trixie and kali-rolling: no tier needed.
 hexyl                  # skip:kali — hex viewer, the stack's only binary-inspection verb.
                        #             Same story as git-delta: in apt on noble and trixie,
                        #             absent from kali-rolling, pinned HEXYL_VERSION there.

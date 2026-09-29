@@ -98,8 +98,8 @@ jobs:
             label: "ubuntu 26.04 (early warning)"
             blocking: false
           # Kali: the rolling target, and the only lane that exercises the
-          # `# only:kali` tier at all. The other three resolve the untiered 32 names;
-          # this one resolves 47 and checks the two floors that ride the tier
+          # `# only:kali` tier at all. The other three resolve the untiered 33 names;
+          # this one resolves 45 and checks the two floors that ride the tier
           # (neovim >= 0.12.0, tree-sitter-cli >= 0.26.1) — the floors that make
           # tiering those packages in safe rather than a silent downgrade.
           #
