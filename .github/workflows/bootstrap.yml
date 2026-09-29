@@ -39,7 +39,7 @@ jobs:
       prep: "apt-get update -qq && apt-get install -y -q --no-install-recommends bash zsh curl"
       # Run provision() for real, with the package managers and downloaders stubbed
       # (dotgibson/dotfiles-core#575). links-only returns BEFORE provision() is entered, so
-      # until this the whole first half of this bootstrap — apt, the 32-package base stack,
+      # until this the whole first half of this bootstrap — apt, the 33-package base stack,
       # fourteen SHA-pinned installs, both vendor repos, carapace, unattended-upgrades — was
       # executed by no gate anywhere. Proven shim-clean on both images before enabling
       # (dotgibson/dotfiles-Debian#11).

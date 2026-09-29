@@ -14,6 +14,15 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Added
 
+- **`jc` joins the apt base stack** (dotgibson/dotfiles-core#1208) — kellyjonbrazil's
+  command-output-to-JSON converter, next to `gron` in `install/packages.txt`. Untiered,
+  because every target resolves it: noble 1.25.1 (universe), 26.04 1.25.5 (universe),
+  trixie 1.25.4 and kali-rolling 1.25.7 (main). This is the OS-repo half of the fleet
+  ratchet; Core's detection line and `core-doctor` row follow once the fleet installs it.
+  The name counts quoted in the `packages` and `bootstrap` workflow comments move to 33
+  untiered and 45 on Kali. The Kali figure had drifted: it read 47 while the list
+  resolved 44 there.
+
 - **`make lint` stops warning about `apt-get`, `apt-cache` and `dpkg` on every package
   verb** (dotgibson/dotfiles-core#1087, dotgibson/dotfiles-core#1104). Core's capability
   cross-check warns when a `PKG_*` verb's leading binary is absent from
