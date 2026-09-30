@@ -155,6 +155,13 @@ Changes to `core/` are **not** listed here — they arrive as Core releases; see
 
 ### Fixed
 
+- **`TOOLS_OPTIN` opts `yazi` and `viddy` in on both editions** (dotgibson/dotfiles-core#1239).
+  dotgibson/dotfiles-core#1210 corrected PORTING-MATRIX.md's Kali cells for both tools from
+  `cargo³` to `cargo²¹`: this repo installs Kali's cargo but cargo-installs neither. That made
+  them cell-level opt-ins, and without them core-doctor rendered a false `✗` for each on every
+  Kali box. Core's fan-out audit caught the stale declaration and held the v7.14.0 sync back
+  until this landed.
+
 - **The tmux auto-attach honours `DOTFILES_NO_AUTOTMUX`, the fleet's one opt-out name**
   (dotgibson/dotfiles-core#877). MacBook, openSUSE and Gentoo already read it; this layer
   attached unconditionally for any interactive TTY, which is how dotfiles-core's README hero

@@ -82,7 +82,7 @@ MAINT_UNATTENDED_UPGRADE=1
 
 # ── optional tools ────────────────────────────────────────────────────────────
 # A DECLARED LIST REPLACES Core's _CORE_DOCTOR_OPTIN — it does not add to it — so this
-# re-states Core's nine and appends the two this family differs on.
+# re-states Core's nine and appends the four this family differs on.
 #
 # jj and ast-grep are `—²⁹` in PORTING-MATRIX.md's Debian/Ubuntu cells: not packaged on
 # noble or trixie at all, and cargo-only (²¹) on Kali. Core's single list could not say
@@ -90,8 +90,13 @@ MAINT_UNATTENDED_UPGRADE=1
 # a degraded integration where nothing is actually wrong, which is the failure mode most
 # likely to train an operator to ignore the report (#666).
 #
+# yazi and viddy are the same shape since dotgibson/dotfiles-core#1210: `—²⁹` on
+# Debian/Ubuntu and `cargo²¹` on Kali, where this repo installs cargo but cargo-installs
+# neither. Core's fan-out audit gates this list against those matrix cells, and
+# refused the v7.14.0 fan-out until they were here (dotgibson/dotfiles-core#1239).
+#
 # NOT dust, deliberately, however much it looks like the same case: noble has no
 # `du-dust` package, so dust arrives OUT OF BAND under its plain name and is PRESENT.
 # What differs there is the resolved binary name core-doctor displays, not whether the
 # tool is expected — muting it here would hide a real absence.
-TOOLS_OPTIN=lnav hyperfine watchexec shellcheck shfmt ouch git-absorb jnv gping jj ast-grep
+TOOLS_OPTIN=lnav hyperfine watchexec shellcheck shfmt ouch git-absorb jnv gping jj ast-grep yazi viddy
