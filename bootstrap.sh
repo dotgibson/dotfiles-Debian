@@ -297,6 +297,16 @@ fi
 # silently broke every single out-of-band install: the caller's path stayed empty, every
 # unpack was attempted on "/asset", and all of it surfaced only as "could not unpack".
 # Keep these prefixed, and keep them out of step with the caller's names.
+# _dl_write_hint <curl-rc> [open] [close] — a clause for a failed download's message, empty
+# unless curl's rc is 23 ("failure writing output"). That one means the network was fine
+# and the DISK under $TMPDIR was not: trixie's /tmp is a tmpfs, and its per-user quota
+# can fill on a small box (dotfiles-Fedora#208). Saying so stops a reader blaming the
+# network.
+_dl_write_hint() {
+  (($1 == 23)) || return 0
+  printf '%scould not write to %s — disk full or quota?%s' "${2-; }" "${TMPDIR:-/tmp}" "${3-}"
+}
+
 _vi_fetch() {
   local _vi_bin="$1" _vi_url="$2" _vi_want="$3" _vi_outvar="$4"
   # Present AND new enough → nothing to do (the Kali no-op). Present but below the floor
@@ -315,9 +325,10 @@ _vi_fetch() {
   fi
 
   blib_say "$_vi_bin (pinned release asset, sha256-verified)"
-  local _vi_dir; _vi_dir="$(mktemp -d)" || return 1
-  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$_vi_dir/asset" "$_vi_url"; then
-    note_fail "$_vi_bin: download failed ($_vi_url) — SKIPPED"
+  local _vi_dir _vi_rc=0; _vi_dir="$(mktemp -d)" || return 1
+  curl -fsSL --retry 3 --retry-delay 2 -o "$_vi_dir/asset" "$_vi_url" || _vi_rc=$?
+  if ((_vi_rc != 0)); then
+    note_fail "$_vi_bin: download failed ($_vi_url$(_dl_write_hint "$_vi_rc")) — SKIPPED"
     rm -rf "$_vi_dir"; return 1
   fi
   if ! printf '%s  %s\n' "$_vi_want" "$_vi_dir/asset" | sha256sum -c - >/dev/null 2>&1; then
@@ -767,11 +778,13 @@ bootstrap_provision() {
     cara_arch="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
     cara_tmp="$(mktemp -d)"
     blib_say "carapace (upstream .deb)"
-    if curl -fsSL --retry 3 -o "$cara_tmp/carapace.deb" \
-      "https://github.com/carapace-sh/carapace-bin/releases/download/v${CARAPACE_VERSION}/carapace-bin_${CARAPACE_VERSION}_linux_${cara_arch}.deb"; then
+    local cara_rc=0
+    curl -fsSL --retry 3 -o "$cara_tmp/carapace.deb" \
+      "https://github.com/carapace-sh/carapace-bin/releases/download/v${CARAPACE_VERSION}/carapace-bin_${CARAPACE_VERSION}_linux_${cara_arch}.deb" || cara_rc=$?
+    if ((cara_rc == 0)); then
       apt_get install -y "$cara_tmp/carapace.deb" || note_fail "carapace: .deb install failed"
     else
-      note_fail "carapace: .deb download failed — SKIPPED"
+      note_fail "carapace: .deb download failed$(_dl_write_hint "$cara_rc" " (" ")") — SKIPPED"
     fi
     rm -rf "$cara_tmp"
   fi
